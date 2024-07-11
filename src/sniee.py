@@ -19,12 +19,12 @@ class SNIEE():
             val = np.array(R[row, col]).reshape(row.shape)
             bg_net = csr_matrix((val, (row, col)), shape = R.shape)
             print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}, with R cutoff {R_cutoff}.')
-            adata.varm['bg_net'] = bg_net
+            adata.varm['bg_net'] = np.tril(bg_net)
         elif 'bg_net' not in adata.varm.keys():
-            bg_net = csr_matrix(bg_net)
+            bg_net = csr_matrix(np.tril(bg_net))
             adata.varm['bg_net'] = bg_net
         else:
-            adata.varm['bg_net'] = csr_matrix(adata.varm['bg_net'])
+            adata.varm['bg_net'] = csr_matrix(np.tril(adata.varm['bg_net']))
             bg_net = adata.varm['bg_net']
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
@@ -69,9 +69,13 @@ class SNIEE():
             adata = adata_dict[','.join(per_obs)]    
 
             delta_entropy = np.abs(adata.varm['entropy'] - ref_adata.varm['entropy'])
+
             delta_std = np.abs(adata.varm['std'] - ref_adata.varm['std'])
 
-            delta_entropy = delta_entropy * delta_std
+            row, col = self.adata.varm['bg_net'].nonzero()
+            val = (np.array(delta_entropy[row, col]) * np.array(delta_std[row, col])).reshape(-1)
+            # direct dot product will raise much more entry, further investigate
+            delta_entropy = csr_matrix((val, (row, col)), shape = delta_entropy.shape)
             entropy_dict[','.join(per_obs)] = delta_entropy     
 
         self.entropy_dict = entropy_dict  
@@ -80,7 +84,7 @@ class SNIEE():
         df_list = []
         for key, entropy in self.entropy_dict.items():
             #print_msg(f'{key} {entropy.min()} {entropy.max()}')
-            col, row = entropy.nonzero()
+            row, col = entropy.nonzero()
             top_n_indices = np.argpartition(entropy.data, -top_n)[-top_n:]
             sorted_indices = top_n_indices[np.argsort(-entropy.data[top_n_indices])]
             top_row = row[sorted_indices]
@@ -115,7 +119,7 @@ class SNIEE():
         row, col = bg_net.nonzero()
 
         R = self._pearsonr(adata) 
-        val = np.array(R[col, row]).reshape(-1)
+        val = np.array(R[row, col]).reshape(-1)
         R = csr_matrix((np.abs(val), (row, col)), shape = bg_net.shape)
         adata.varm['pearsonr*bg_net'] = R
 
