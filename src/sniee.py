@@ -1,8 +1,13 @@
 
 import numpy as np
-import scanpy as sc
 import pandas as pd
+import scanpy as sc
+import anndata as ad
 from scipy.sparse import csr_matrix
+from pyseat.SEAT import SEAT
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 
 from src.util import print_msg, get_array
 
@@ -61,10 +66,13 @@ class SNIEE():
             adata_dict[','.join(per_obs)] = adata
         self.adata_dict = adata_dict
 
-    def calculate_dynamic_entropy(self, ref_obs, per_obss):
+    def calculate_delta_entropy(self, ref_obs, per_obss):
         adata_dict = self.adata_dict 
         entropy_dict = {}
-        for per_obs in per_obss:
+        entropy_matrix = np.zeros((len(per_obss), self.adata.varm['bg_net'].count_nonzero()))
+
+        row, col = self.adata.varm['bg_net'].nonzero()
+        for i, per_obs in enumerate(per_obss):
             ref_adata = adata_dict[f'{ref_obs}']
             adata = adata_dict[','.join(per_obs)]    
 
@@ -72,40 +80,26 @@ class SNIEE():
 
             delta_std = np.abs(adata.varm['std'] - ref_adata.varm['std'])
 
-            row, col = self.adata.varm['bg_net'].nonzero()
             val = (np.array(delta_entropy[row, col]) * np.array(delta_std[row, col])).reshape(-1)
             # direct dot product will raise much more entry, further investigate
             delta_entropy = csr_matrix((val, (row, col)), shape = delta_entropy.shape)
             entropy_dict[','.join(per_obs)] = delta_entropy     
 
+            entropy_matrix[i, :] = val
+
+
+        edata = ad.AnnData(entropy_matrix)
+        edata.obs_names = [x[0] for x in per_obss]
+        edata = edata[self.adata.obs_names]
+        edata.obs = self.adata.obs
+        edata.var_names = self.adata.var_names[row] + '_' + self.adata.var_names[col]
+        edata.var['gene1'] = self.adata.var_names[row]
+        edata.var['gene2'] = self.adata.var_names[col]
+        edata.var['gene1_i'] = row
+        edata.var['gene2_i'] = col
+
         self.entropy_dict = entropy_dict  
-
-    def report_top_entropy_relation(self, top_n=10):
-        df_list = []
-        for key, entropy in self.entropy_dict.items():
-            #print_msg(f'{key} {entropy.min()} {entropy.max()}')
-            row, col = entropy.nonzero()
-            top_n_indices = np.argpartition(entropy.data, -top_n)[-top_n:]
-            sorted_indices = top_n_indices[np.argsort(-entropy.data[top_n_indices])]
-            top_row = row[sorted_indices]
-            top_col = col[sorted_indices]
-            top_val = entropy.data[sorted_indices]   
-
-            top_entropy = csr_matrix((top_val, (top_row, top_col)), shape = entropy.shape)     
-            df = pd.DataFrame({
-                'key': key,
-                'gene1_i': top_row,
-                'gene2_i': top_col,
-                'gene1': self.adata.var_names[top_row],
-                'gene2': self.adata.var_names[top_col],
-                'delta entropy': top_val
-                })
-            df_list.append(df)
-
-        df = pd.concat(df_list)
-        df = df[df.gene1 != df.gene2]
-        return df 
-
+        self.edata = edata
 
     def _calculate_cluster_entropy(self, obs):
         print_msg(f'Calculating the cluster entropy for {obs}')
@@ -147,7 +141,73 @@ class SNIEE():
             val = (adata.var[key].to_numpy()[row]+adata.var[key].to_numpy()[col])/2
             adata.varm[key] = csr_matrix((val, (row, col)), shape = adata.varm['bg_net'].shape)
 
+    def find_dynamic_entropy(self, n_cluster=2, n_top_genes=5000,
+                             random_state=0, n_pcs=30, n_neighbors=10,
+                             plot=True, plot_label=[]):
+        adata = self.adata
+        edata = self.edata
 
+        # cluster with expression
+        sc.pp.scale(adata)
+        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
+        sc.tl.pca(adata)
+        sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
+        sc.tl.umap(adata, random_state=random_state)
 
+        seat = SEAT(affinity="gaussian_kernel",
+                    sparsification="knn_neighbors",
+                    objective="SE",
+                    n_neighbors=n_neighbors,
+                    strategy="bottom_up")
+        seat.fit_predict(adata.obsm['X_umap'])
+        clusters = ('c' + seat.ks_clusters[f'K={n_cluster}'].astype(str)).tolist()
+        adata.obs['seat_cluster'] = clusters
+
+        if plot:
+            sc.pl.umap(adata, color=['seat_cluster', *plot_label])
+
+        count_df = pd.DataFrame(self.adata.obs[['seat_cluster', 'type']].value_counts())
+        count_df = count_df.reset_index()
+        print(count_df)
+        ref_count = count_df[count_df['type'] == 'Ref']['count'].max()
+        self.ref_like_cluster = count_df[count_df['count'] == ref_count]['seat_cluster'].tolist()[0]
+        print(self.ref_like_cluster)
+        edata.obs = adata[edata.obs_names].obs
+        edata.obsm['X_umap'] = adata[edata.obs_names].obsm['X_umap']
+        sc.tl.rank_genes_groups(edata, groupby="seat_cluster", method="wilcoxon")
+        return
+
+    def find_localnet_against_ref(self, n_top_relations=50, var_quantile=0.75, p_cutoff=0.05,
+                                    plot=True):
+        edata = self.edata
+        group = self.ref_like_cluster
+        df = sc.get.rank_genes_groups_df(edata, group=group)
+        df = df[df['pvals_adj'] < p_cutoff].head(n_top_relations)
+        local_net = df['names']
+
+        val = edata[edata.obs['seat_cluster'] == group, local_net].X.var(axis=0)
+        cutoff = np.quantile(val, var_quantile)
+
+        if plot:
+            sns.histplot(val)
+            plt.axvline(x=cutoff, color='r')
+
+        self.local_net = local_net[val < cutoff].tolist()
+        return
+    
+    def annot_perputation(self, n_neighbors=10, n_cluster=2, plot_label=[],
+                          plot=True):
+
+        seat = SEAT(affinity="gaussian_kernel",
+                    sparsification="knn_neighbors",
+                    objective="SE",
+                    n_neighbors=n_neighbors,
+                    strategy="bottom_up")
+        seat.fit_predict(self.edata[:, self.local_net].X)
+        clusters = ('c' + seat.ks_clusters[f'K={n_cluster}'].astype(str)).tolist()
+        self.adata.obs['per_seat_cluster'] = clusters
+        self.edata.obs = self.adata.obs
+        if True:
+            sc.pl.umap(self.adata, color=['per_seat_cluster', *plot_label])
 
 
