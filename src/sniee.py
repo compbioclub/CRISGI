@@ -69,13 +69,13 @@ class SNIEE():
 
     def _relation_score(self, adata, method):
         X = get_array(adata, layer='log1p')
-        if 'pearsonr' == method:  # split pos and neg in the future
+        if 'pearson' == method:  # split pos and neg in the future
             R = np.corrcoef(X.T)
-        if 'spearman' == method:
-            R = spearmanr(X.T)
-        if 'pos_coexp':
+        if 'spearman' == method: # include p-val
+            R = spearmanr(X).statistic
+        if 'pos_coexp' == method:
             R = np.dot(X.T, X)/X.shape[0]
-        if 'neg_coexp':
+        if 'neg_coexp' == method:
             R = np.dot(X.T, X.max() - X)/X.shape[0]
         print_msg(f'{method} {R.shape} min { R.min()} max {R.max()}')
         return R
@@ -211,11 +211,16 @@ class SNIEE():
     def find_gene_hub(self, anchor_group, n_top_relations=50, var_quantile=0.75, p_cutoff=0.05,
                                     plot=True):
         edata = self.edata
-        for method in self.relation_methods:
+        df_list = []
+
+        for i, method in enumerate(self.relation_methods):
             df = sc.get.rank_genes_groups_df(edata, group=anchor_group, 
                                              key=f'{method}_rank_genes_groups')
             df = df[df['pvals_adj'] < p_cutoff].head(n_top_relations)
+            if df.empty:
+                continue
             df['method'] = method
+
             gene_hub = df['names']
             val = edata[edata.obs[self.groupby] == anchor_group, gene_hub].layers[method].var(axis=0)
             cutoff = np.quantile(val, var_quantile)
@@ -226,8 +231,22 @@ class SNIEE():
                 plt.title(method)
                 plt.show()
 
-            edata.uns[f'{method}_gene_hub'] = gene_hub[val <= cutoff].tolist()
+            gene_hub = gene_hub[val <= cutoff].tolist()
+            edata.uns[f'{method}_gene_hub'] = gene_hub
 
+            df = df[df['names'].isin(gene_hub)]
+            df_list.append(df)
+
+            if i == 0:
+                common_gene_hub = set(gene_hub)
+                all_gene_hub = set(gene_hub)
+            else:
+                common_gene_hub = common_gene_hub & set(gene_hub)
+                all_gene_hub = all_gene_hub | set(gene_hub)
+
+        edata.uns['rank_genes_groups'] = pd.concat(df_list)
+        edata.uns[f'common_gene_hub'] = list(common_gene_hub)
+        edata.uns[f'all_gene_hub'] = list(all_gene_hub)
         return
     
     def annot_perputation(self, n_neighbors=10, n_cluster=2, plot_label=[],
