@@ -26,3 +26,12 @@ def get_top_n(val, adata, top_n, max=True):
     top_col = col[sorted_indices]
     return top_row, top_col
 
+def set_adata_var(adata, header, x):
+    df = adata.var.copy()
+    df[header] = x
+    adata.var = df
+
+def set_adata_obs(adata, header, x):
+    df = adata.obs.copy()
+    df[header] = x
+    adata.obs = df
