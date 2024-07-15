@@ -23,6 +23,8 @@ class SNIEE():
         adata.var['i'] = range(adata.shape[1])
         self.adata = adata
         self.relation_methods = relation_methods
+
+        self.process_adata()
         self.load_bg_net(bg_net)
 
 
@@ -52,6 +54,14 @@ class SNIEE():
 
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
+
+    def process_adata(self, n_top_genes=5000, random_state=0, n_pcs=30, n_neighbors=10):
+        adata = self.adata
+        sc.pp.scale(adata)
+        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
+        sc.tl.pca(adata)
+        sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
+        sc.tl.umap(adata, random_state=random_state)
 
     def _std(self, adata):
         X = get_array(adata, layer='log1p')
@@ -84,7 +94,6 @@ class SNIEE():
 
     def calculate_delta_entropy(self, ref_obs, per_obss):
         adata_dict = self.adata_dict 
-        entropy_dict = {}
         entropy_matrix = np.zeros((len(per_obss), self.adata.varm['bg_net'].count_nonzero()))
 
         row, col = self.adata.varm['bg_net'].nonzero()
@@ -112,9 +121,6 @@ class SNIEE():
                 # direct dot product will raise much more entry, further investigate   
                 edata.layers[method][i, :] = val
 
-
-
-        self.entropy_dict = entropy_dict  
         self.edata = edata
 
     def _calculate_group_entropy(self, obs):
@@ -159,19 +165,13 @@ class SNIEE():
             val = (adata.var[key].to_numpy()[row]+adata.var[key].to_numpy()[col])/2
             adata.varm[key] = csr_matrix((val, (row, col)), shape = adata.varm['bg_net'].shape)
 
-    def find_dynamic_entropy(self, n_cluster=2, n_top_genes=5000,
-                             random_state=0, n_pcs=30, n_neighbors=10,
+
+
+    def find_ref_like_cluster(self, n_cluster=2, n_neighbors=10,
                              plot=True, plot_label=[]):
         adata = self.adata
-        edata = self.edata
 
         # cluster with expression
-        sc.pp.scale(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
-        sc.tl.pca(adata)
-        sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
-        sc.tl.umap(adata, random_state=random_state)
-
         seat = SEAT(affinity="gaussian_kernel",
                     sparsification="knn_neighbors",
                     objective="SE",
@@ -189,31 +189,45 @@ class SNIEE():
         print(count_df)
         ref_count = count_df[count_df['type'] == 'Ref']['count'].max()
         self.ref_like_cluster = count_df[count_df['count'] == ref_count]['seat_cluster'].tolist()[0]
-        print(self.ref_like_cluster)
-        edata.obs = adata[edata.obs_names].obs
-        edata.obsm['X_umap'] = adata[edata.obs_names].obsm['X_umap']
+        print('ref_like_cluster is', self.ref_like_cluster)
 
+    def rank_diff_entropy(self, groupby=None, plot=True, plot_label=[]):
+        if groupby is None:
+            self.find_ref_like_cluster(n_cluster=2, n_neighbors=10,
+                                       plot=plot, plot_label=plot_label)
+            groupby = 'seat_cluster'
+
+        self.groupby = groupby
+        adata = self.adata
+        edata = self.edata
+        edata.obs = adata[edata.obs_names].obs
+        edata.obsm['X_umap'] = adata[edata.obs_names].obsm['X_umap']        
         for method in self.relation_methods:
-            sddd
-            sc.tl.rank_genes_groups(edata, groupby="seat_cluster", method="wilcoxon")
+            sc.tl.rank_genes_groups(edata, layer=method,
+                                    groupby=groupby, method="wilcoxon")
+            edata.uns[f'{method}_rank_genes_groups'] = edata.uns['rank_genes_groups']
         return
 
-    def find_localnet_against_ref(self, n_top_relations=50, var_quantile=0.75, p_cutoff=0.05,
+    def find_gene_hub(self, anchor_group, n_top_relations=50, var_quantile=0.75, p_cutoff=0.05,
                                     plot=True):
         edata = self.edata
-        group = self.ref_like_cluster
-        df = sc.get.rank_genes_groups_df(edata, group=group)
-        df = df[df['pvals_adj'] < p_cutoff].head(n_top_relations)
-        local_net = df['names']
+        for method in self.relation_methods:
+            df = sc.get.rank_genes_groups_df(edata, group=anchor_group, 
+                                             key=f'{method}_rank_genes_groups')
+            df = df[df['pvals_adj'] < p_cutoff].head(n_top_relations)
+            df['method'] = method
+            gene_hub = df['names']
+            val = edata[edata.obs[self.groupby] == anchor_group, gene_hub].layers[method].var(axis=0)
+            cutoff = np.quantile(val, var_quantile)
 
-        val = edata[edata.obs['seat_cluster'] == group, local_net].X.var(axis=0)
-        cutoff = np.quantile(val, var_quantile)
+            if plot:
+                sns.histplot(val)
+                plt.axvline(x=cutoff, color='r')
+                plt.title(method)
+                plt.show()
 
-        if plot:
-            sns.histplot(val)
-            plt.axvline(x=cutoff, color='r')
+            edata.uns[f'{method}_gene_hub'] = gene_hub[val <= cutoff].tolist()
 
-        self.local_net = local_net[val < cutoff].tolist()
         return
     
     def annot_perputation(self, n_neighbors=10, n_cluster=2, plot_label=[],
