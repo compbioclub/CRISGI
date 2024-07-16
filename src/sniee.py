@@ -25,35 +25,46 @@ class SNIEE():
         self.relation_methods = relation_methods
 
         self.process_adata()
-        self.load_bg_net(bg_net)
 
-
-    def load_bg_net(self, bg_net):
-        
         if bg_net is None:
-            ref_gb_net = pickle.load(open("src/stringdb_human_v12_gb_net.pk","rb"))
-            ref_genes = pickle.load(open("src/stringdb_human_v12_genes.pk","rb"))
-            self.adata.uns['stringdb_genes'] = ref_genes
-            ref_genes2i = {g:i for i, g in enumerate(ref_genes)}
-
-            genes = self.adata.var_names
-            bg_net = np.zeros((len(genes), len(genes)))
-            for i, gene1 in enumerate(genes):
-                if gene1 not in ref_genes2i:
-                    continue
-                for j, gene2 in enumerate(genes):
-                    if gene2 not in ref_genes2i:
-                        continue
-                    if i < j:
-                        continue
-                    ref_gene1_i = ref_genes2i[gene1]
-                    ref_gene2_i = ref_genes2i[gene2]
-                    bg_net[i, j] = ref_gb_net[ref_gene1_i, ref_gene2_i]
-            bg_net = np.tril(bg_net)
-            bg_net = csr_matrix(bg_net)
-
+            genes = self.adata.var_names.sort_values()
+            self.adata = self.adata[:, genes]
+            bg_net, _ = self.load_bg_net(genes)
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
+
+
+    def load_bg_net(self, genes):
+        
+        if (genes != np.sort(genes)).any():    
+            raise ValueError('The genes should be sorted!')
+        
+        print('input gene', len(genes))
+        ref_gb_net = pickle.load(open("src/stringdb_human_v12_gb_net.pk","rb"))
+        ref_genes = pickle.load(open("src/stringdb_human_v12_genes.pk","rb"))
+        self.adata.uns['stringdb_genes'] = ref_genes
+        ref_genes2i = {g:i for i, g in enumerate(ref_genes)}
+
+        relations = []
+        bg_net = np.zeros((len(genes), len(genes)))
+        for i, gene1 in enumerate(genes):
+            if gene1 not in ref_genes:
+                continue
+            for j, gene2 in enumerate(genes):
+                if gene2 not in ref_genes:
+                    continue
+                if i > j:
+                    continue
+                ref_gene1_i = ref_genes2i[gene1]
+                ref_gene2_i = ref_genes2i[gene2]
+                if ref_gb_net[ref_gene1_i, ref_gene2_i] > 0:
+                    bg_net[i, j] = ref_gb_net[ref_gene1_i, ref_gene2_i]
+                    relations.append(f'{gene1}_{gene2}')
+
+        bg_net = np.triu(bg_net)
+        bg_net = csr_matrix(bg_net)        
+        print('output relations after bg_net', len(relations))  
+        return bg_net, relations
 
     def process_adata(self, n_top_genes=5000, random_state=0, n_pcs=30, n_neighbors=10):
         adata = self.adata
@@ -108,7 +119,9 @@ class SNIEE():
         edata.var['gene2_i'] = col
 
         for method in self.relation_methods:
-            edata.layers[method] = entropy_matrix.copy()
+            edata.layers[f'{method}_entropy'] = entropy_matrix.copy()
+            edata.layers[f'{method}_prob'] = entropy_matrix.copy()
+            edata.layers[f'{method}_bg_net'] = entropy_matrix.copy()
 
         for i, per_obs in enumerate(per_obss):
             ref_adata = adata_dict[f'{ref_obs}']
@@ -119,7 +132,13 @@ class SNIEE():
                 delta_entropy = np.abs(adata.varm[f'{method}_entropy'] - ref_adata.varm[f'{method}_entropy'])
                 val = (np.array(delta_entropy[row, col]) * np.array(delta_std[row, col])).reshape(-1)
                 # direct dot product will raise much more entry, further investigate   
-                edata.layers[method][i, :] = val
+                edata.layers[f'{method}_entropy'][i, :] = val
+
+                val = adata.varm[f'{method}_bg_net'][row, col].reshape(-1)
+                edata.layers[f'{method}_bg_net'][i, :] = val
+
+                val = csr_matrix(adata.varm[f'{method}_prob'])[row, col].reshape(-1)
+                edata.layers[f'{method}_prob'][i, :] = val
 
         self.edata = edata
 
@@ -203,12 +222,13 @@ class SNIEE():
         edata.obs = adata[edata.obs_names].obs
         edata.obsm['X_umap'] = adata[edata.obs_names].obsm['X_umap']        
         for method in self.relation_methods:
-            sc.tl.rank_genes_groups(edata, layer=method,
+            sc.tl.rank_genes_groups(edata, layer=f'{method}_entropy',
                                     groupby=groupby, method="wilcoxon")
             edata.uns[f'{method}_rank_genes_groups'] = edata.uns['rank_genes_groups']
         return
 
-    def find_gene_hub(self, anchor_group, n_top_relations=50, var_quantile=0.75, p_cutoff=0.05,
+    def find_gene_hub(self, anchor_group, n_top_relations=50, var_quantile=1, 
+                      p_cutoff=0.05, fc_cutoff=1,
                                     plot=True):
         edata = self.edata
         df_list = []
@@ -216,13 +236,14 @@ class SNIEE():
         for i, method in enumerate(self.relation_methods):
             df = sc.get.rank_genes_groups_df(edata, group=anchor_group, 
                                              key=f'{method}_rank_genes_groups')
-            df = df[df['pvals_adj'] < p_cutoff].head(n_top_relations)
+            
+            df = df[(df['pvals_adj'] < p_cutoff) & (df['logfoldchanges'].abs() > fc_cutoff)].head(n_top_relations)
+            
             if df.empty:
                 continue
             df['method'] = method
 
-            gene_hub = df['names']
-            val = edata[edata.obs[self.groupby] == anchor_group, gene_hub].layers[method].var(axis=0)
+            val = edata[edata.obs[self.groupby] == anchor_group, df['names']].layers[f'{method}_entropy'].var(axis=0)
             cutoff = np.quantile(val, var_quantile)
 
             if plot:
@@ -231,10 +252,10 @@ class SNIEE():
                 plt.title(method)
                 plt.show()
 
-            gene_hub = gene_hub[val <= cutoff].tolist()
+            df = df[val <= cutoff]
+            gene_hub = df['names'].tolist()
             edata.uns[f'{method}_gene_hub'] = gene_hub
 
-            df = df[df['names'].isin(gene_hub)]
             df_list.append(df)
 
             if i == 0:
