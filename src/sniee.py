@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import pickle
 import gseapy as gp
 import pymannkendall as mk
+from multiprocessing import Pool
 
 
 pd.options.mode.copy_on_write = True
@@ -19,7 +20,8 @@ from src.util import print_msg, get_array, set_adata_var, set_adata_obs
 
 class SNIEE():
 
-    def __init__(self, adata, R_cutoff=0.1, bg_net=None, bg_net_score_cutoff=850,
+    def __init__(self, adata, bg_net=None, bg_net_score_cutoff=850,
+                 n_top_genes=5000, n_threads=5,
                  relation_methods=['pearson', 'spearman', 'pos_coexp', 'neg_coexp']
                  ):
 
@@ -29,12 +31,12 @@ class SNIEE():
         self.adata = adata
         self.relation_methods = relation_methods
         self.bg_net_score_cutoff = bg_net_score_cutoff
-
-        self.preprocess_adata()
+        self.n_threads = n_threads
+        self.preprocess_adata(n_top_genes=n_top_genes)
 
         if 'bg_net' not in adata.varm:
             if bg_net is None:
-                genes = self.adata.var_names.sort_values()
+                genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
                 self.adata = self.adata[:, genes]
                 bg_net, _ = self.load_bg_net(genes)
         else:
@@ -111,28 +113,56 @@ class SNIEE():
         X = get_array(adata, layer='log1p')
         set_adata_var(adata, 'std', X.std(axis=0))
 
+
+    def _scale(self, adata, axis=0):
+        X = get_array(adata, layer='log1p')
+        N = X.shape[axis]
+        mean = X.mean(axis=axis, keepdims=True)
+        X = X - mean
+        std = np.sqrt(np.power(X, 2).sum(axis=axis, keepdims=True)/N)
+        std[std == 0] = 1
+        X = X / std
+        adata.X = X
+        adata.layers['scale'] = X.copy()
+        adata.var['mean'] = mean.reshape(-1)
+        adata.var['std'] = std.reshape(-1)
+
+    def _pearsonr(self, adata):
+        self._scale(adata)
+        X = get_array(adata, layer='scale')
+        R = np.dot(X.T, X)/X.shape[1]
+        return R
+
     def _relation_score(self, adata, method):
         X = get_array(adata, layer='log1p')
+        #self._std(adata)
+
         if 'pearson' == method:  # split pos and neg in the future
-            R = np.corrcoef(X.T)
+            R = self._pearsonr(adata) # faster
+            #R = np.corrcoef(X.T)
         if 'spearman' == method: # include p-val
             R = spearmanr(X).statistic
         if 'pos_coexp' == method:
             R = np.dot(X.T, X)/X.shape[0]
         if 'neg_coexp' == method:
             R = np.dot(X.T, X.max() - X)/X.shape[0]
-        print_msg(f'{method} {R.shape} min { R.min()} max {R.max()}')
+        print_msg(f'{method} size {R.shape} min { R.min()} max {R.max()}')
         return R
+    
+    def _calculate_entropy_for_per_obs(self, ref_obs, per_obs):
+        print_msg(f'---Calculating the group entropy for {per_obs}')
+        adata = self._calculate_group_entropy(ref_obs + per_obs)
+        return (','.join(per_obs), adata)
     
     def calculate_entropy(self, ref_obs, per_obss):
         adata_dict = {}
         print_msg(f'---Calculating the group entropy for reference')
         adata = self._calculate_group_entropy(ref_obs)
-        adata_dict[f'{ref_obs}'] = adata        
+        adata_dict[f'{ref_obs}'] = adata   
+
         for per_obs in per_obss:
-            print_msg(f'---Calculating the group entropy for {per_obs}')
-            adata = self._calculate_group_entropy(ref_obs + per_obs)
-            adata_dict[','.join(per_obs)] = adata
+            self._calculate_entropy_for_per_obs(ref_obs, per_obs)
+
         self.adata_dict = adata_dict
 
     def calculate_delta_entropy(self, ref_obs, per_obss):
@@ -186,7 +216,6 @@ class SNIEE():
         bg_net = self.adata.varm['bg_net']
         row, col = bg_net.nonzero()
 
-        self._std(adata)
         R = self._relation_score(adata, method) 
         val = np.array(R[row, col]).reshape(-1)
         R = csr_matrix((np.abs(val), (row, col)), shape = bg_net.shape)
@@ -294,11 +323,15 @@ class SNIEE():
                 common_diff_relations = common_diff_relations & set(relations)
                 all_diff_relations = all_diff_relations | set(relations)
 
+        if df.empty:
+            return
+        
         df = pd.concat(df_list)
         if sortby in ['logfoldchanges', 'scores']:
             df = df.sort_values(by=sortby, ascending=False)        
         else:
             df = df.sort_values(by=sortby, ascending=True)        
+        
         edata.uns['rank_genes_groups'] = df
         edata.uns[f'common_diff_relations'] = list(common_diff_relations)
         edata.uns[f'all_diff_relations'] = list(all_diff_relations)
@@ -340,32 +373,39 @@ class SNIEE():
         edata.uns[f'all_trend_relations'] = list(all_relations)
         return
 
-    def pathway_enrich(self, n_top_relations=100, n_space=10,
-                       method='pearson',
-                       gene_sets=['MSigDB_Hallmark_2020','KEGG_2021_Human', 
-                                  'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023'],
-                       organism='human',
-                       plot=True):
 
+    def _enrich_for_top_n(self, args):
+        top_n, relation_list, gene_sets, organism = args
+        gene_list = list(set(np.array([x.split('_') for x in relation_list[:top_n]]).reshape(-1)))
+        enr = gp.enrichr(gene_list=gene_list, gene_sets=gene_sets,
+                         background=self.adata.var_names, organism=organism, outdir=None)
+        df = enr.results
+        df['n_gene'] = df['Genes'].apply(lambda x: len(x.split(';')))
+        df['top_n'] = top_n
+        df['top_n_ratio'] = df['n_gene'] / top_n
+        return top_n, enr, df
+
+    def pathway_enrich(self, n_top_relations=100, n_space=10, method='pearson',
+                       gene_sets=['KEGG_2021_Human', 
+                                  'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
+                                  'MSigDB_Hallmark_2020'],
+                       organism='human', plot=True):
         relation_list = self.edata.uns[f'{method}_diff_relations']
-        df_list = []
         enr_dict = {}
-        top_n = 10
-        while top_n < n_top_relations and top_n <= len(relation_list):
-            gene_list = list(set(np.array([ x.split('_') for x in relation_list[:top_n]]).reshape(-1)))
-            enr = gp.enrichr(gene_list=gene_list,
-                             gene_sets=gene_sets,
-                             background=self.adata.var_names,
-                             organism=organism, 
-                             outdir=None
-                             )
-            enr_dict[top_n] = enr       
-            df = enr.results
-            df['n_gene'] = df['Genes'].apply(lambda x: len(x.split(';')))
-            df['top_n'] = top_n
-            df['top_n_ratio'] = df['n_gene'] / top_n
+        df_list = []
+
+        # Prepare arguments for parallel processing
+        args_list = [(top_n, relation_list, gene_sets, organism) for top_n in range(10, n_top_relations + 1, n_space)]
+
+        # Use multiprocessing Pool to run the enrichment in parallel
+        with Pool(processes=self.n_threads) as pool:
+            results = pool.map(self._enrich_for_top_n, args_list)
+
+        # Collect results
+        for top_n, enr, df in results:
+            enr_dict[top_n] = enr
             df_list.append(df)
-            top_n += n_space
+
         df = pd.concat(df_list)
         self.edata.uns[f'{method}_enrich_res'] = enr_dict
         self.edata.uns[f'{method}_enrich_df'] = df
