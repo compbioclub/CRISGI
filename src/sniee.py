@@ -4,17 +4,22 @@ import pandas as pd
 import scanpy as sc
 import anndata as ad
 from scipy.sparse import csr_matrix
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, ttest_1samp
 from pyseat.SEAT import SEAT
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pickle
+import gseapy as gp
+import pymannkendall as mk
+
+
+pd.options.mode.copy_on_write = True
 
 from src.util import print_msg, get_array, set_adata_var, set_adata_obs
 
 class SNIEE():
 
-    def __init__(self, adata, R_cutoff=0.1, bg_net=None,
+    def __init__(self, adata, R_cutoff=0.1, bg_net=None, bg_net_score_cutoff=850,
                  relation_methods=['pearson', 'spearman', 'pos_coexp', 'neg_coexp']
                  ):
 
@@ -23,13 +28,17 @@ class SNIEE():
         adata.var['i'] = range(adata.shape[1])
         self.adata = adata
         self.relation_methods = relation_methods
+        self.bg_net_score_cutoff = bg_net_score_cutoff
 
-        self.process_adata()
+        self.preprocess_adata()
 
-        if bg_net is None:
-            genes = self.adata.var_names.sort_values()
-            self.adata = self.adata[:, genes]
-            bg_net, _ = self.load_bg_net(genes)
+        if 'bg_net' not in adata.varm:
+            if bg_net is None:
+                genes = self.adata.var_names.sort_values()
+                self.adata = self.adata[:, genes]
+                bg_net, _ = self.load_bg_net(genes)
+        else:
+            bg_net = csr_matrix(np.triu(self.adata.varm['bg_net']))
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
@@ -43,8 +52,20 @@ class SNIEE():
         ref_gb_net = pickle.load(open("src/stringdb_human_v12_gb_net.pk","rb"))
         ref_genes = pickle.load(open("src/stringdb_human_v12_genes.pk","rb"))
         self.adata.uns['stringdb_genes'] = ref_genes
-        ref_genes2i = {g:i for i, g in enumerate(ref_genes)}
+        
+        if ref_gb_net.count_nonzero() > len(genes)*len(genes):
+            bg_net, relations = self._loop_gene(genes, ref_genes, ref_gb_net)
+        else:
+            bg_net, relations = self._loop_bg_net(genes, ref_genes, ref_gb_net)
 
+        bg_net = np.triu(bg_net)
+        bg_net = csr_matrix(bg_net)        
+        print('output relations after bg_net', len(relations))  
+        return bg_net, relations
+
+    def _loop_gene(self, genes, ref_genes, ref_gb_net):
+        print_msg('load bg_net by looping genes.')
+        ref_genes2i = {g:i for i, g in enumerate(ref_genes)}
         relations = []
         bg_net = np.zeros((len(genes), len(genes)))
         for i, gene1 in enumerate(genes):
@@ -57,18 +78,30 @@ class SNIEE():
                     continue
                 ref_gene1_i = ref_genes2i[gene1]
                 ref_gene2_i = ref_genes2i[gene2]
-                if ref_gb_net[ref_gene1_i, ref_gene2_i] > 0:
+                if ref_gb_net[ref_gene1_i, ref_gene2_i] >= self.bg_net_score_cutoff:
                     bg_net[i, j] = ref_gb_net[ref_gene1_i, ref_gene2_i]
                     relations.append(f'{gene1}_{gene2}')
-
-        bg_net = np.triu(bg_net)
-        bg_net = csr_matrix(bg_net)        
-        print('output relations after bg_net', len(relations))  
         return bg_net, relations
 
-    def process_adata(self, n_top_genes=5000, random_state=0, n_pcs=30, n_neighbors=10):
+    def _loop_bg_net(self, genes, ref_genes, ref_gb_net):
+        print_msg('load bg_net by looping bg_net.')
+        genes2i = {g:i for i, g in enumerate(genes)}
+        relations = []
+        bg_net = np.zeros((len(genes), len(genes)))
+        row, col = ref_gb_net.nonzero()
+        for ref_gene1_i, ref_gene2_i in zip(row, col):
+            gene1, gene2 = ref_genes[ref_gene1_i], ref_genes[ref_gene2_i]
+            if (gene1 not in genes) or (gene2 not in genes):
+                continue
+            if ref_gb_net[ref_gene1_i, ref_gene2_i] >= self.bg_net_score_cutoff:
+                i, j = genes2i[gene1], genes2i[gene2]
+                bg_net[i, j] = ref_gb_net[ref_gene1_i, ref_gene2_i]
+                relations.append(f'{gene1}_{gene2}')
+        return bg_net, relations
+
+    def preprocess_adata(self, n_top_genes=5000, random_state=0, n_pcs=30, n_neighbors=10):
         adata = self.adata
-        sc.pp.scale(adata)
+        #sc.pp.scale(adata)
         sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
         sc.tl.pca(adata)
         sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
@@ -91,8 +124,7 @@ class SNIEE():
         print_msg(f'{method} {R.shape} min { R.min()} max {R.max()}')
         return R
     
-    def calculate_entropy(self, ref_obs, per_obss                        
-                          ):
+    def calculate_entropy(self, ref_obs, per_obss):
         adata_dict = {}
         print_msg(f'---Calculating the group entropy for reference')
         adata = self._calculate_group_entropy(ref_obs)
@@ -104,14 +136,15 @@ class SNIEE():
         self.adata_dict = adata_dict
 
     def calculate_delta_entropy(self, ref_obs, per_obss):
+        self.per_obss = per_obss
+        self.ref_obs = ref_obs
         adata_dict = self.adata_dict 
         entropy_matrix = np.zeros((len(per_obss), self.adata.varm['bg_net'].count_nonzero()))
 
         row, col = self.adata.varm['bg_net'].nonzero()
         edata = ad.AnnData(entropy_matrix)
         edata.obs_names = [x[0] for x in per_obss]
-        edata = edata[self.adata.obs_names]
-        edata.obs = self.adata.obs
+        edata.obs = self.adata[edata.obs_names, :].obs
         edata.var_names = self.adata.var_names[row] + '_' + self.adata.var_names[col]
         edata.var['gene1'] = self.adata.var_names[row]
         edata.var['gene2'] = self.adata.var_names[col]
@@ -186,7 +219,7 @@ class SNIEE():
 
 
 
-    def find_ref_like_cluster(self, n_cluster=2, n_neighbors=10,
+    def find_ref_like_group(self, ref_groupby, ref_group, n_cluster=2, n_neighbors=10, 
                              plot=True, plot_label=[]):
         adata = self.adata
 
@@ -203,17 +236,22 @@ class SNIEE():
         if plot:
             sc.pl.umap(adata, color=['seat_cluster', *plot_label])
 
-        count_df = pd.DataFrame(self.adata.obs[['seat_cluster', 'type']].value_counts())
+        count_df = pd.DataFrame(self.adata.obs[['seat_cluster', ref_groupby]].value_counts())
         count_df = count_df.reset_index()
         print(count_df)
-        ref_count = count_df[count_df['type'] == 'Ref']['count'].max()
-        self.ref_like_cluster = count_df[count_df['count'] == ref_count]['seat_cluster'].tolist()[0]
-        print('ref_like_cluster is', self.ref_like_cluster)
+        ref_count_df = count_df[count_df[ref_groupby] == ref_group]
 
-    def rank_diff_entropy(self, groupby=None, plot=True, plot_label=[]):
+        ref_count = ref_count_df['count'].max()
+        self.ref_like_group = count_df[count_df['count'] == ref_count]['seat_cluster'].tolist()[0]
+        self.per_like_group = [x for x in count_df['seat_cluster'] if x != self.ref_like_group][0]
+        print('ref_like_group is', self.ref_like_group)
+        print('per_like_group is', self.per_like_group)
+
+    def test_diff_entropy(self, groupby=None, plot=True, plot_label=[], 
+                          ref_groupby=None, ref_group=None):
         if groupby is None:
-            self.find_ref_like_cluster(n_cluster=2, n_neighbors=10,
-                                       plot=plot, plot_label=plot_label)
+            self.find_ref_like_group(ref_groupby, ref_group, n_cluster=2, n_neighbors=10,
+                                     plot=plot, plot_label=plot_label)
             groupby = 'seat_cluster'
 
         self.groupby = groupby
@@ -227,9 +265,9 @@ class SNIEE():
             edata.uns[f'{method}_rank_genes_groups'] = edata.uns['rank_genes_groups']
         return
 
-    def find_gene_hub(self, anchor_group, n_top_relations=50, var_quantile=1, 
-                      p_cutoff=0.05, fc_cutoff=1,
-                                    plot=True):
+    def get_diff_relations(self, anchor_group, n_top_relations=100, 
+                           p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
+                           plot=True):
         edata = self.edata
         df_list = []
 
@@ -237,49 +275,115 @@ class SNIEE():
             df = sc.get.rank_genes_groups_df(edata, group=anchor_group, 
                                              key=f'{method}_rank_genes_groups')
             
-            df = df[(df['pvals_adj'] < p_cutoff) & (df['logfoldchanges'].abs() > fc_cutoff)].head(n_top_relations)
+            df = df[(df['pvals_adj'] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)]
+            if sortby == 'logfoldchanges':
+                df = df.sort_values(by=sortby, ascending=False)
+            df = df.head(n_top_relations)
             
             if df.empty:
                 continue
             df['method'] = method
-
-            val = edata[edata.obs[self.groupby] == anchor_group, df['names']].layers[f'{method}_entropy'].var(axis=0)
-            cutoff = np.quantile(val, var_quantile)
-
-            if plot:
-                sns.histplot(val)
-                plt.axvline(x=cutoff, color='r')
-                plt.title(method)
-                plt.show()
-
-            df = df[val <= cutoff]
-            gene_hub = df['names'].tolist()
-            edata.uns[f'{method}_gene_hub'] = gene_hub
-
+            relations = df['names'].tolist()
+            edata.uns[f'{method}_diff_relations'] = relations
             df_list.append(df)
 
             if i == 0:
-                common_gene_hub = set(gene_hub)
-                all_gene_hub = set(gene_hub)
+                common_diff_relations = set(relations)
+                all_diff_relations = set(relations)
             else:
-                common_gene_hub = common_gene_hub & set(gene_hub)
-                all_gene_hub = all_gene_hub | set(gene_hub)
+                common_diff_relations = common_diff_relations & set(relations)
+                all_diff_relations = all_diff_relations | set(relations)
 
-        edata.uns['rank_genes_groups'] = pd.concat(df_list)
-        edata.uns[f'common_gene_hub'] = list(common_gene_hub)
-        edata.uns[f'all_gene_hub'] = list(all_gene_hub)
+        df = pd.concat(df_list)
+        if sortby in ['logfoldchanges', 'scores']:
+            df = df.sort_values(by=sortby, ascending=False)        
+        else:
+            df = df.sort_values(by=sortby, ascending=True)        
+        edata.uns['rank_genes_groups'] = df
+        edata.uns[f'common_diff_relations'] = list(common_diff_relations)
+        edata.uns[f'all_diff_relations'] = list(all_diff_relations)
+        # sort the all and common relations, to be continued
         return
     
-    def annot_perputation(self, n_neighbors=10, n_cluster=2, plot_label=[],
-                          plot=True):
+    def test_trend_entropy(self, p_cutoff=0.05):
+        adata = self.adata
+        edata = self.edata
 
+        for i, method in enumerate(self.relation_methods):
+            relations = set()
+            for j, relation in enumerate(edata.uns[f'{method}_diff_relations']):
+                per_adata = adata[adata.obs[self.groupby] == self.per_like_group, :]
+                sorted_samples = per_adata.obs.sort_values(by=['time']).index.tolist()
+                val = edata[sorted_samples, relation].layers[f'{method}_entropy']
+                per_result = mk.original_test(val.reshape(-1), alpha=p_cutoff)
+
+                ref_adata = adata[adata.obs[self.groupby] != self.per_like_group, :]
+                sorted_samples = ref_adata.obs.sort_values(by=['time']).index.tolist()
+                val = edata[sorted_samples, relation].layers[f'{method}_entropy']
+                _, p_value = ttest_1samp(val, 0)
+
+                if per_result.trend != 'increasing' or p_value > p_cutoff:
+                    continue
+                relations.add(relation)
+
+            print(method, 'diff', j, 'trend', len(relations))
+            edata.uns[f'{method}_trend_relations'] = list(relations)
+            if i == 0:
+                common_relations = set(relations)
+                all_relations = set(relations)
+            else:
+                common_relations = common_relations & set(relations)
+                all_relations = all_relations | set(relations)
+
+        #edata.uns['rank_genes_groups'] = pd.concat(df_list)
+        edata.uns[f'common_trend_relations'] = list(common_relations)
+        edata.uns[f'all_trend_relations'] = list(all_relations)
+        return
+
+    def pathway_enrich(self, n_top_relations=100, n_space=10,
+                       method='pearson',
+                       gene_sets=['MSigDB_Hallmark_2020','KEGG_2021_Human', 
+                                  'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023'],
+                       organism='human',
+                       plot=True):
+
+        relation_list = self.edata.uns[f'{method}_diff_relations']
+        df_list = []
+        enr_dict = {}
+        top_n = 10
+        while top_n < n_top_relations and top_n <= len(relation_list):
+            gene_list = list(set(np.array([ x.split('_') for x in relation_list[:top_n]]).reshape(-1)))
+            enr = gp.enrichr(gene_list=gene_list,
+                             gene_sets=gene_sets,
+                             background=self.adata.var_names,
+                             organism=organism, 
+                             outdir=None
+                             )
+            enr_dict[top_n] = enr       
+            df = enr.results
+            df['n_gene'] = df['Genes'].apply(lambda x: len(x.split(';')))
+            df['top_n'] = top_n
+            df['top_n_ratio'] = df['n_gene'] / top_n
+            df_list.append(df)
+            top_n += n_space
+        df = pd.concat(df_list)
+        self.edata.uns[f'{method}_enrich_res'] = enr_dict
+        self.edata.uns[f'{method}_enrich_df'] = df
+          
+
+    def annot_perputation(self, n_neighbors=10, n_cluster=2, plot_label=[],
+                          method='all',
+                          plot=True):
+        # need improvement
         seat = SEAT(affinity="gaussian_kernel",
                     sparsification="knn_neighbors",
                     objective="SE",
                     n_neighbors=n_neighbors,
                     strategy="bottom_up")
-        seat.fit_predict(self.edata[:, self.local_net].X)
+        print(self.edata.uns[f'{method}_gene_hub'])
+        seat.fit_predict(self.edata[:, self.edata.uns[f'{method}_gene_hub']].layers[f'{method}_entropy'])
         clusters = ('c' + seat.ks_clusters[f'K={n_cluster}'].astype(str)).tolist()
+        print(clusters)
         self.adata.obs['per_seat_cluster'] = clusters
         self.edata.obs = self.adata.obs
         if True:
