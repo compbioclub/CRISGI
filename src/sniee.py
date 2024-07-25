@@ -12,7 +12,8 @@ import pickle
 import gseapy as gp
 import pymannkendall as mk
 from multiprocessing import Pool
-
+import warnings
+warnings.filterwarnings('ignore')
 
 pd.options.mode.copy_on_write = True
 
@@ -38,11 +39,24 @@ class SNIEE():
             if bg_net is None:
                 genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
                 self.adata = self.adata[:, genes]
+                print(self.adata)
                 bg_net, _ = self.load_bg_net(genes)
         else:
             bg_net = csr_matrix(np.triu(self.adata.varm['bg_net']))
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
+
+
+    def analysis(self, ref_obs, per_obss, ref_groupby, ref_group, plot_label, method,
+                 n_top_relations=100, plot=True):
+        self.calculate_entropy(ref_obs, per_obss)
+        self.calculate_delta_entropy(ref_obs, per_obss)
+        self.test_diff_entropy(groupby=None, ref_groupby=ref_groupby, ref_group=ref_group,
+                               plot_label=plot_label)
+        self.get_diff_relations(per_group=self.per_like_group, n_top_relations=n_top_relations, plot=plot)
+        self.test_trend_entropy()
+
+        #self.pathway_enrich(n_top_relations=n_top_relations, method=method)
 
 
     def load_bg_net(self, genes):
@@ -104,7 +118,7 @@ class SNIEE():
     def preprocess_adata(self, n_top_genes=5000, random_state=0, n_pcs=30, n_neighbors=10):
         adata = self.adata
         #sc.pp.scale(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
+        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes, flavor='cell_ranger')
         sc.tl.pca(adata)
         sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
         sc.tl.umap(adata, random_state=random_state)
@@ -123,7 +137,7 @@ class SNIEE():
         std[std == 0] = 1
         X = X / std
         adata.X = X
-        adata.layers['scale'] = X.copy()
+        adata.layers['scale'] = X.copy()       
         adata.var['mean'] = mean.reshape(-1)
         adata.var['std'] = std.reshape(-1)
 
@@ -135,7 +149,7 @@ class SNIEE():
 
     def _relation_score(self, adata, method):
         X = get_array(adata, layer='log1p')
-        #self._std(adata)
+        self._std(adata)
 
         if 'pearson' == method:  # split pos and neg in the future
             R = self._pearsonr(adata) # faster
@@ -149,11 +163,6 @@ class SNIEE():
         print_msg(f'{method} size {R.shape} min { R.min()} max {R.max()}')
         return R
     
-    def _calculate_entropy_for_per_obs(self, ref_obs, per_obs):
-        print_msg(f'---Calculating the group entropy for {per_obs}')
-        adata = self._calculate_group_entropy(ref_obs + per_obs)
-        return (','.join(per_obs), adata)
-    
     def calculate_entropy(self, ref_obs, per_obss):
         adata_dict = {}
         print_msg(f'---Calculating the group entropy for reference')
@@ -161,8 +170,9 @@ class SNIEE():
         adata_dict[f'{ref_obs}'] = adata   
 
         for per_obs in per_obss:
-            self._calculate_entropy_for_per_obs(ref_obs, per_obs)
-
+            print_msg(f'---Calculating the group entropy for {per_obs}')
+            adata = self._calculate_group_entropy(ref_obs + per_obs)
+            adata_dict[','.join(per_obs)] = adata
         self.adata_dict = adata_dict
 
     def calculate_delta_entropy(self, ref_obs, per_obss):
@@ -207,6 +217,7 @@ class SNIEE():
 
     def _calculate_group_entropy(self, obs):
         adata = self.adata[obs, :]
+
         for method in self.relation_methods:
             self._calculate_node_entropy(adata, method)
             self._calculate_edge_entropy(adata, method)
@@ -222,7 +233,9 @@ class SNIEE():
         adata.varm[f'{method}_bg_net'] = R
         print_msg(f'{method}_bg_net min {R.min()} max {R.max()}')
 
-        prob = R/(R.sum(axis=0))    
+        R_sum = R.sum(axis=0)
+        R_sum[R_sum == 0] = 1  # TBD, speed up
+        prob = R/R_sum
         print_msg(f'{method}_prob min {prob.min()} max {prob.max()}')
  
         adata.varm[f'{method}_prob'] = prob
@@ -263,7 +276,8 @@ class SNIEE():
         adata.obs['seat_cluster'] = clusters
 
         if plot:
-            sc.pl.umap(adata, color=['seat_cluster', *plot_label])
+            plot_label = [x for x in plot_label if x in adata.obs.columns]
+            sc.pl.umap(adata, color=['seat_cluster', *plot_label], show=False)
 
         count_df = pd.DataFrame(self.adata.obs[['seat_cluster', ref_groupby]].value_counts())
         count_df = count_df.reset_index()
@@ -294,17 +308,20 @@ class SNIEE():
             edata.uns[f'{method}_rank_genes_groups'] = edata.uns['rank_genes_groups']
         return
 
-    def get_diff_relations(self, anchor_group, n_top_relations=100, 
-                           p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
+    def get_diff_relations(self, per_group, n_top_relations=100, 
+                           p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
                            plot=True):
         edata = self.edata
         df_list = []
 
         for i, method in enumerate(self.relation_methods):
-            df = sc.get.rank_genes_groups_df(edata, group=anchor_group, 
+            df = sc.get.rank_genes_groups_df(edata, group=per_group, 
                                              key=f'{method}_rank_genes_groups')
-            
-            df = df[(df['pvals_adj'] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)]
+            if p_adjust:
+                p_method = 'pvals_adj'
+            else:
+                p_method = 'pvals'
+            df = df[(df[p_method] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)]
             if sortby == 'logfoldchanges':
                 df = df.sort_values(by=sortby, ascending=False)
             df = df.head(n_top_relations)
@@ -331,35 +348,42 @@ class SNIEE():
             df = df.sort_values(by=sortby, ascending=False)        
         else:
             df = df.sort_values(by=sortby, ascending=True)        
-        
+
         edata.uns['rank_genes_groups'] = df
         edata.uns[f'common_diff_relations'] = list(common_diff_relations)
         edata.uns[f'all_diff_relations'] = list(all_diff_relations)
         # sort the all and common relations, to be continued
         return
     
-    def test_trend_entropy(self, p_cutoff=0.05):
+    def _test_up_trend(self, relation, adata, edata, method='pearson', p_cutoff=0.05):
+        sorted_samples = adata.obs.sort_values(by=['time']).index.tolist()
+        val = edata[sorted_samples, relation].layers[f'{method}_entropy'].reshape(-1)
+        result = mk.original_test(val, alpha=p_cutoff)
+        return result.trend == 'increasing'
+    
+    def _test_zero_trend(self, relation, adata, edata, method='pearson', p_cutoff=0.05):
+        sorted_samples = adata.obs.sort_values(by=['time']).index.tolist()
+        val = edata[sorted_samples, relation].layers[f'{method}_entropy'].reshape(-1)
+        _, p_value = ttest_1samp(val, 0)
+        return p_value < p_cutoff 
+
+    def test_trend_entropy(self, per_group=None, p_cutoff=0.05):
         adata = self.adata
         edata = self.edata
 
         for i, method in enumerate(self.relation_methods):
             relations = set()
             for j, relation in enumerate(edata.uns[f'{method}_diff_relations']):
-                per_adata = adata[adata.obs[self.groupby] == self.per_like_group, :]
-                sorted_samples = per_adata.obs.sort_values(by=['time']).index.tolist()
-                val = edata[sorted_samples, relation].layers[f'{method}_entropy']
-                per_result = mk.original_test(val.reshape(-1), alpha=p_cutoff)
+                per_adata = adata[adata.obs[self.groupby] == per_group, :]
+                is_per_up = self._test_up_trend(relation, per_adata, edata, method=method, p_cutoff=p_cutoff)
 
-                ref_adata = adata[adata.obs[self.groupby] != self.per_like_group, :]
-                sorted_samples = ref_adata.obs.sort_values(by=['time']).index.tolist()
-                val = edata[sorted_samples, relation].layers[f'{method}_entropy']
-                _, p_value = ttest_1samp(val, 0)
+                ref_adata = adata[adata.obs[self.groupby] != per_group, :]
+                is_ref_zero = self._test_zero_trend(relation, ref_adata, edata, method=method, p_cutoff=p_cutoff)
 
-                if per_result.trend != 'increasing' or p_value > p_cutoff:
-                    continue
-                relations.add(relation)
+                if is_per_up and is_ref_zero:
+                    relations.add(relation)
 
-            print(method, 'diff', j, 'trend', len(relations))
+            print(method, 'diff', j+1, 'trend', len(relations))
             edata.uns[f'{method}_trend_relations'] = list(relations)
             if i == 0:
                 common_relations = set(relations)
@@ -373,9 +397,25 @@ class SNIEE():
         edata.uns[f'all_trend_relations'] = list(all_relations)
         return
 
+    def test_val_trend_entropy(self, relations, method='pearson', p_cutoff=0.05):
+        adata = self.adata
+        edata = self.edata
+        candidates = []
+        for relation in relations:
+            if relation not in self.edata.var_names:
+                continue
+            is_up = self._test_up_trend(relation, adata, edata, method=method, p_cutoff=p_cutoff)
+            is_zero = self._test_zero_trend(relation, adata, edata, method=method, p_cutoff=p_cutoff)
 
+            if is_up or is_zero:
+                candidates.append(relation)    
+        print(method, 'val trend before', len(relations), 'after', len(candidates))        
+        return candidates
+    
     def _enrich_for_top_n(self, args):
         top_n, relation_list, gene_sets, organism = args
+        print('_enrich_for_top_n', top_n, gene_sets)
+
         gene_list = list(set(np.array([x.split('_') for x in relation_list[:top_n]]).reshape(-1)))
         enr = gp.enrichr(gene_list=gene_list, gene_sets=gene_sets,
                          background=self.adata.var_names, organism=organism, outdir=None)
@@ -385,15 +425,16 @@ class SNIEE():
         df['top_n_ratio'] = df['n_gene'] / top_n
         return top_n, enr, df
 
-    def pathway_enrich(self, n_top_relations=100, n_space=10, method='pearson',
+    def pathway_enrich(self, n_top_relations=100, n_space=10, 
+                       method='pearson', test_type='trend',
                        gene_sets=['KEGG_2021_Human', 
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'],
                        organism='human', plot=True):
-        relation_list = self.edata.uns[f'{method}_diff_relations']
+        relation_list = self.edata.uns[f'{method}_{test_type}_relations']
         enr_dict = {}
         df_list = []
-
+        print(relation_list)
         # Prepare arguments for parallel processing
         args_list = [(top_n, relation_list, gene_sets, organism) for top_n in range(10, n_top_relations + 1, n_space)]
 

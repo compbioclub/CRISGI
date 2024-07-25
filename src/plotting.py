@@ -7,14 +7,138 @@ import networkx as nx
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from src.util import set_adata_obs
+import os, random
 
-def relation_score(sniee_obj, groupby=None):
+def relation_score(sniee_obj, method='pearson', test_type='trend', groupby=None,
+                   relations=None, title='', unit_header='patient',
+                   ax=None):
     edata = sniee_obj.edata
     df = edata.obs.copy()
-    df['score'] = edata[:, edata.uns['common_trend_relations']].layers['pearson_entropy'].sum(axis=1)
+    if relations is None:
+        relations = edata.uns[f'{method}_{test_type}_relations']
+    else:
+        relations = [x for x in relations if x in edata.var_names]
+
+    df['score'] = edata[:, relations].layers[f'{method}_entropy'].sum(axis=1)
+    if groupby is None:
+        groupby = sniee_obj.groupby
+    sns.lineplot(df, x='time', y='score', hue=groupby, #units=unit_header, estimator=None,
+                 ax=ax)
+    if ax is not None:
+        ax.set_title(title)
+    else:
+        plt.title(title)
+        plt.show()
+
+def get_landscape_score(sniee_obj, relations, method = 'pearson', subject_header = 'patient',
+                        out_prefix='./out/prefix'):
+    our_dir = os.path.dirname(out_prefix)
+    if not os.path.exists(our_dir):
+        os.makedirs(our_dir)
+
+    edata = sniee_obj.edata
+    adata = sniee_obj.adata
+
+    subjects = edata.obs[subject_header].unique()
+    times = np.sort(edata.obs['time'].unique())
+    time2i = {x:i for i, x in enumerate(times)}
+    print('subjects', len(subjects), 'times', len(times))
+    for i, subject in enumerate(subjects):
+        sedata = edata[edata.obs[subject_header] == subject]
+
+        t_is = [time2i[t] for t in sedata.obs['time']]
+        X = np.empty((len(relations), len(times)))
+        X[:] = np.nan
+        X[:, t_is] = sedata[:, relations].layers[f'{method}_entropy'].T
+        df = pd.DataFrame(X, columns=times, index=relations)
+        df.to_csv(f'{out_prefix}_{subject}_landscape.csv')
+
+        #sns.heatmap(df, cmap='RdYlBu_r', robust=True)
+        #plt.title(f'delta entropy score for patient {subject}')
+        #plt.show()
+
+
+def generate_landscape_images(folder_path, output_path, robust=False, scale=False,
+                              rep_n=10, random_seed=0,
+                              figsize=(5,5), dpi=500):
+    """
+    Parameters:
+    folder_path (str): Path to the folder containing CSV files.
+    output_path (str): Path to the folder where PNG files will be saved.
+    robust (bool): If True, use a robust colormap. Default is False.
+    scale (bool): If True, scale all heatmaps to the same color range. Default is False.
+    """
+    # Get all CSV file names in the folder
+    csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
+
+    if scale:
+        # Initialize variables to store global min and max values
+        global_min = float('inf')
+        global_max = float('-inf')
+
+        # Read each CSV file to determine the global min and max values
+        data_frames = []
+        for file_name in csv_files:
+            file_path = os.path.join(folder_path, file_name)
+            df = pd.read_csv(file_path)
+            data_frames.append(df)
+
+            # Flatten the values to determine the global min and max
+            df_values = df.drop(columns=['Unnamed: 0']).values.flatten()
+            current_min = df_values.min()
+            current_max = df_values.max()
+
+            if current_min < global_min:
+                global_min = current_min
+            if current_max > global_max:
+                global_max = current_max
+
+    # Read and process each CSV file
+    for file_name in csv_files:
+        file_path = os.path.join(folder_path, file_name)
+        df = pd.read_csv(file_path, index_col=0)
+
+        df = df.dropna(how='all', axis=0)
+        df = df.dropna(how='all', axis=1)
+
+        random.seed(random_seed)
+        for i in range(rep_n):
+            if i > 0:
+                df = df.sample(frac=1)
+            # Create heatmap without displaying data values
+            plt.figure(figsize=figsize)
+            if scale:
+                heatmap = sns.heatmap(df.astype(float), annot=False, cmap='RdYlBu_r', cbar=False, robust=robust, vmin=global_min, vmax=global_max)
+            else:
+                heatmap = sns.heatmap(df.astype(float), annot=False, cmap='RdYlBu_r', cbar=False, robust=robust)
+            
+            heatmap.set_xticks([])
+            heatmap.set_yticks([])
+            heatmap.set_xlabel('')
+            heatmap.set_ylabel('')
+            
+            # Remove title
+            plt.title('')
+            
+            # Save the heatmap as a PNG file with a transparent background
+            output_file = os.path.join(output_path, os.path.splitext(file_name)[0] + f'_rep{i}.png')
+            plt.savefig(output_file, transparent=True, bbox_inches='tight', pad_inches=0, dpi=dpi)
+            plt.close()
+
+
+
+
+def relation_score_boxplot(sniee_obj, groupby=None, 
+                           relation_type='common_trend_relations',
+                           method='pearson',
+                           title=''):
+    edata = sniee_obj.edata
+    df = edata.obs.copy()
+    df['score'] = edata[:, edata.uns[relation_type]].layers[f'{method}_entropy'].sum(axis=1)
     if groupby is None:
         groupby = sniee_obj.groupby
     sns.lineplot(df, x='time', y='score', hue=groupby)
+    plt.title(title)
     plt.show()
 
 def investigate_relation(sniee_obj, relation, groupby='group', 
@@ -92,7 +216,8 @@ def pathway_dynamic(sniee_obj, method='all', p_cutoff=0.05, n_top_pathway=20):
         plt.show()  
 
 
-def draw_gene_network(sniee_obj, method='pearson', n_top_relations=100,
+def draw_gene_network(sniee_obj, method='pearson', test_type='trend',
+                    n_top_relations=100,
                       cmap='viridis', html_fn="gene_network.html"):
     net = Network(notebook=True, cdn_resources='in_line')
     
@@ -104,7 +229,7 @@ def draw_gene_network(sniee_obj, method='pearson', n_top_relations=100,
     gene2scores = df['scores'].to_dict()
     gene2logfoldchanges = df['logfoldchanges'].to_dict()
     
-    relation_list = sniee_obj.edata.uns[f'{method}_trend_relations'][:n_top_relations]
+    relation_list = sniee_obj.edata.uns[f'{method}_{test_type}_relations'][:n_top_relations]
 
     weights = [ gene2scores[relation] for relation in relation_list]
     norm = mcolors.Normalize(vmin=min(weights), vmax=max(weights), clip=True)
@@ -126,5 +251,15 @@ def draw_gene_network(sniee_obj, method='pearson', n_top_relations=100,
         net.add_edge(gene1, gene2, value=score, 
                      title=title, 
                      color=hex_color)
-    # Generate the network
+
     net.show(html_fn)
+
+
+def draw_relation_heatmap(sniee_obj, method='pearson', 
+                          n_top_relations=100,
+                          cmap='viridis'):    
+    
+    relation_list = sniee_obj.edata.uns[f'{method}_trend_relations'][:n_top_relations]
+    for relation in relation_list:
+        gene1, gene2 = relation.split('_')
+        # to be continued
