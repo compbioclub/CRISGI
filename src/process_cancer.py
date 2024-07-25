@@ -26,7 +26,8 @@ def survival_analysis(sniee_obj,
                       relations=None,
                       survival_types = ['os', 'pfs'],
                       time_unit = 'time',
-                      test_type='trend', method='pearson'):
+                      test_type='trend', method='pearson',
+                      title='', out_prefix='test'):
     adata = sniee_obj.adata
     edata = sniee_obj.edata
     if relations is None:
@@ -37,6 +38,8 @@ def survival_analysis(sniee_obj,
     df = sedata.obs.copy()
 
     for survival in survival_types:
+        if survival not in df.columns:
+            continue
         df = df[~df[f'{survival}_status'].isna()]
         df = df[~df[survival].isna()]
         df[f"{survival}_status"] = df[f"{survival}_status"].astype(bool)
@@ -49,9 +52,12 @@ def survival_analysis(sniee_obj,
                 df[survival][mask_group],
                 conf_type="log-log",
             )
-
-            plt.step(time_treatment, survival_prob_treatment, where="post", label=f"score {score_group}")
-            plt.fill_between(time_treatment, conf_int[0], conf_int[1], alpha=0.25, step="post")
+            if score_group.startswith('<'):
+                color = 'steelblue'
+            else:
+                color = 'red'
+            plt.step(time_treatment, survival_prob_treatment, where="post", label=f"score {score_group}", color=color)
+            plt.fill_between(time_treatment, conf_int[0], conf_int[1], alpha=0.25, step="post", color=color)
 
         dt = np.dtype([(f"{survival}_status", bool), (survival, float)])
         y = [(df.iloc[i][f"{survival}_status"], df.iloc[i][survival]) for i in range(df.shape[0])]
@@ -62,7 +68,12 @@ def survival_analysis(sniee_obj,
         plt.ylabel(r"est. probability of survival $\hat{S}(t)$")
         plt.xlabel(f"{survival.upper()} {time_unit} $t$")
         plt.legend(loc="best")
-        plt.title(f'log-rank test\nchi2: {round(chi2, 2)}, p-value: {p_value}')
-        plt.show()
+        plt.title(f'{title} log-rank test\nchi2: {round(chi2, 2)}, p-value: {p_value}')
+        print(out_prefix)
+        if out_prefix:
+            plt.savefig(f'{out_prefix}_{survival.upper()}_surv.png')
+            plt.show()
+        else:
+            plt.show()
     
     return sedata

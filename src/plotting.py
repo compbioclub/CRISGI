@@ -10,7 +10,8 @@ from src.util import set_adata_obs
 import os, random
 
 def relation_score(sniee_obj, method='pearson', test_type='trend', groupby=None,
-                   relations=None, title='', unit_header='patient',
+                   relations=None, unit_header='patient',
+                   title='', out_prefix='test',
                    ax=None):
     edata = sniee_obj.edata
     df = edata.obs.copy()
@@ -26,6 +27,10 @@ def relation_score(sniee_obj, method='pearson', test_type='trend', groupby=None,
                  ax=ax)
     if ax is not None:
         ax.set_title(title)
+    elif out_prefix:
+        plt.title(title)
+        plt.savefig(f'{out_prefix}_{title}_relation_score.png')
+        plt.show()
     else:
         plt.title(title)
         plt.show()

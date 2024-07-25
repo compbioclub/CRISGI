@@ -262,7 +262,7 @@ class SNIEE():
 
 
     def find_ref_like_group(self, ref_groupby, ref_group, n_cluster=2, n_neighbors=10, 
-                             plot=True, plot_label=[]):
+                             plot=True, plot_label=[], out_prefix=None):
         adata = self.adata
 
         # cluster with expression
@@ -278,6 +278,8 @@ class SNIEE():
         if plot:
             plot_label = [x for x in plot_label if x in adata.obs.columns]
             sc.pl.umap(adata, color=['seat_cluster', *plot_label], show=False)
+            plt.savefig(f'{out_prefix}_umap.png')
+            plt.show()
 
         count_df = pd.DataFrame(self.adata.obs[['seat_cluster', ref_groupby]].value_counts())
         count_df = count_df.reset_index()
@@ -291,10 +293,11 @@ class SNIEE():
         print('per_like_group is', self.per_like_group)
 
     def test_diff_entropy(self, groupby=None, plot=True, plot_label=[], 
-                          ref_groupby=None, ref_group=None):
+                          ref_groupby=None, ref_group=None,
+                          out_prefix=None):
         if groupby is None:
             self.find_ref_like_group(ref_groupby, ref_group, n_cluster=2, n_neighbors=10,
-                                     plot=plot, plot_label=plot_label)
+                                     plot=plot, plot_label=plot_label, out_prefix=out_prefix)
             groupby = 'seat_cluster'
 
         self.groupby = groupby
