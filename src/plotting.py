@@ -78,7 +78,7 @@ def generate_landscape_images(folder_path, output_path, robust=False, scale=Fals
     scale (bool): If True, scale all heatmaps to the same color range. Default is False.
     """
     # Get all CSV file names in the folder
-    csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
+    csv_files = [f for f in os.listdir(folder_path) if f.endswith('_landscape.csv')]
 
     if scale:
         # Initialize variables to store global min and max values
