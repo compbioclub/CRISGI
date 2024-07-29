@@ -9,9 +9,12 @@ from pyseat.SEAT import SEAT
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pickle
+import os
+import pickle
 import gseapy as gp
 import pymannkendall as mk
 from multiprocessing import Pool
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -23,7 +26,9 @@ class SNIEE():
 
     def __init__(self, adata, bg_net=None, bg_net_score_cutoff=850,
                  n_top_genes=5000, n_threads=5,
-                 relation_methods=['pearson', 'spearman', 'pos_coexp', 'neg_coexp']
+                 relation_methods=['pearson', 'spearman', 'pos_coexp', 'neg_coexp'],
+                 dataset='test',
+                 out_dir='./out'
                  ):
 
         adata = adata.copy()
@@ -33,20 +38,24 @@ class SNIEE():
         self.relation_methods = relation_methods
         self.bg_net_score_cutoff = bg_net_score_cutoff
         self.n_threads = n_threads
+        self.dataset = dataset
+
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        self.out_dir = out_dir
         self.preprocess_adata(n_top_genes=n_top_genes)
 
         if 'bg_net' not in adata.varm:
             if bg_net is None:
                 genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
                 self.adata = self.adata[:, genes]
-                print(self.adata)
                 bg_net, _ = self.load_bg_net(genes)
         else:
             bg_net = csr_matrix(np.triu(self.adata.varm['bg_net']))
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
-
+    '''
     def analysis(self, ref_obs, per_obss, ref_groupby, ref_group, plot_label, method,
                  n_top_relations=100, plot=True):
         self.calculate_entropy(ref_obs, per_obss)
@@ -54,10 +63,15 @@ class SNIEE():
         self.test_diff_entropy(groupby=None, ref_groupby=ref_groupby, ref_group=ref_group,
                                plot_label=plot_label)
         self.get_diff_relations(per_group=self.per_like_group, n_top_relations=n_top_relations, plot=plot)
-        self.test_trend_entropy()
+        self.test_trend_entropy(per_group=self.per_like_group)
 
         #self.pathway_enrich(n_top_relations=n_top_relations, method=method)
+    '''
 
+    def save(self):
+        pk_fn = f'{self.out_dir}/{self.dataset}_sniee_obj.pk'
+        pickle.dump(self, open(pk_fn, 'wb'))        
+        print_msg(f'[Output] SNIEE object has saved to {pk_fn}.')
 
     def load_bg_net(self, genes):
         
@@ -292,9 +306,10 @@ class SNIEE():
         print('ref_like_group is', self.ref_like_group)
         print('per_like_group is', self.per_like_group)
 
-    def test_diff_entropy(self, groupby=None, plot=True, plot_label=[], 
+    def test_DER(self, groupby=None, plot=True, plot_label=[], 
                           ref_groupby=None, ref_group=None,
                           out_prefix=None):
+        
         if groupby is None:
             self.find_ref_like_group(ref_groupby, ref_group, n_cluster=2, n_neighbors=10,
                                      plot=plot, plot_label=plot_label, out_prefix=out_prefix)
@@ -311,93 +326,117 @@ class SNIEE():
             edata.uns[f'{method}_rank_genes_groups'] = edata.uns['rank_genes_groups']
         return
 
-    def get_diff_relations(self, per_group, n_top_relations=100, 
-                           p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
-                           plot=True):
+    def get_DER(self, per_group, n_top_relations=None, 
+                p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
+                ):
         edata = self.edata
         df_list = []
 
         for i, method in enumerate(self.relation_methods):
             df = sc.get.rank_genes_groups_df(edata, group=per_group, 
                                              key=f'{method}_rank_genes_groups')
+            df['method'] = method
+
             if p_adjust:
                 p_method = 'pvals_adj'
             else:
                 p_method = 'pvals'
-            df = df[(df[p_method] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)]
-            if sortby == 'logfoldchanges':
-                df = df.sort_values(by=sortby, ascending=False)
-            df = df.head(n_top_relations)
-            
-            if df.empty:
-                continue
-            df['method'] = method
-            relations = df['names'].tolist()
-            edata.uns[f'{method}_diff_relations'] = relations
+
+            df['DER'] = (df[p_method] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)
+            if sortby in ['logfoldchanges', 'scores']:
+                df = df.sort_values(by=['DER', sortby], ascending=False)
+            if sortby == 'pvals_adj':
+                df = df.sort_values(by=['DER', sortby], ascending=[False, True])
+
             df_list.append(df)
 
-            if i == 0:
-                common_diff_relations = set(relations)
-                all_diff_relations = set(relations)
+            if n_top_relations:
+                top_df = df[df['DER']].head(n_top_relations)        
             else:
-                common_diff_relations = common_diff_relations & set(relations)
-                all_diff_relations = all_diff_relations | set(relations)
+                top_df = df[df['DER']]    
+            if top_df.empty:
+                continue
+            relations = top_df['names'].tolist()
+            edata.uns[f'{method}_DER'] = relations
 
-        if df.empty:
-            return
+            if i == 0:
+                common_DERs = set(relations)
+                all_DERs = set(relations)
+            else:
+                common_DERs = common_DERs & set(relations)
+                all_DERs = all_DERs | set(relations)
         
         df = pd.concat(df_list)
         if sortby in ['logfoldchanges', 'scores']:
-            df = df.sort_values(by=sortby, ascending=False)        
+            df = df.sort_values(by=['DER', sortby], ascending=False)
         else:
-            df = df.sort_values(by=sortby, ascending=True)        
+            df = df.sort_values(by=['DER', sortby], ascending=[False, True])
 
-        edata.uns['rank_genes_groups'] = df
-        edata.uns[f'common_diff_relations'] = list(common_diff_relations)
-        edata.uns[f'all_diff_relations'] = list(all_diff_relations)
+        df.to_csv(f'{self.out_dir}/{per_group}_DER.csv', index=False)
+        edata.uns[f'{per_group}_DER'] = df
+        edata.uns[f'common_DER'] = list(common_DERs)
+        edata.uns[f'all_DER'] = list(all_DERs)
         # sort the all and common relations, to be continued
         return
     
     def _test_up_trend(self, relation, adata, edata, method='pearson', p_cutoff=0.05):
         sorted_samples = adata.obs.sort_values(by=['time']).index.tolist()
         val = edata[sorted_samples, relation].layers[f'{method}_entropy'].reshape(-1)
-        result = mk.original_test(val, alpha=p_cutoff)
-        return result.trend == 'increasing'
+        res = mk.original_test(val, alpha=p_cutoff)
+        # https://pypi.org/project/pymannkendall/
+        res = {
+            'relation': relation, 'method': method,
+            'trend': res.trend, 'h': res.h, 'p': res.p, 'z': res.z,
+            'Tau': res.Tau, 's': res.s, 'var_s': res.var_s, 'slope': res.slope, 'intercept': res.intercept
+        }
+        return res
     
     def _test_zero_trend(self, relation, adata, edata, method='pearson', p_cutoff=0.05):
         sorted_samples = adata.obs.sort_values(by=['time']).index.tolist()
         val = edata[sorted_samples, relation].layers[f'{method}_entropy'].reshape(-1)
-        _, p_value = ttest_1samp(val, 0)
-        return p_value < p_cutoff 
+        t_statistic, p_value = ttest_1samp(val, 0)
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_1samp.html
+        res = {'relation': relation, 'method': method,
+               't_statistic': t_statistic, 'p_value': p_value}
+        return res 
 
-    def test_trend_entropy(self, per_group=None, p_cutoff=0.05):
+    def test_TER(self, per_group, p_cutoff=0.05):
         adata = self.adata
         edata = self.edata
 
+        trend_list = []
         for i, method in enumerate(self.relation_methods):
             relations = set()
-            for j, relation in enumerate(edata.uns[f'{method}_diff_relations']):
+            for j, relation in enumerate(edata.uns[f'{method}_DER']):
                 per_adata = adata[adata.obs[self.groupby] == per_group, :]
-                is_per_up = self._test_up_trend(relation, per_adata, edata, method=method, p_cutoff=p_cutoff)
+                up_res = self._test_up_trend(relation, per_adata, edata, method=method, p_cutoff=p_cutoff)
+                is_per_up = up_res['trend'] == 'increasing'
 
                 ref_adata = adata[adata.obs[self.groupby] != per_group, :]
-                is_ref_zero = self._test_zero_trend(relation, ref_adata, edata, method=method, p_cutoff=p_cutoff)
-
-                if is_per_up and is_ref_zero:
+                zero_res = self._test_zero_trend(relation, ref_adata, edata, method=method, p_cutoff=p_cutoff)
+                is_ref_zero = zero_res['p_value'] < p_cutoff 
+                up_res.update(zero_res)
+                
+                is_TER = is_per_up and is_ref_zero    
+                up_res['TER'] = is_TER
+                if is_TER:
                     relations.add(relation)
+                trend_list.append(up_res)
 
             print(method, 'diff', j+1, 'trend', len(relations))
-            edata.uns[f'{method}_trend_relations'] = list(relations)
+            edata.uns[f'{method}_TER'] = list(relations)
             if i == 0:
-                common_relations = set(relations)
-                all_relations = set(relations)
+                common_TERs = set(relations)
+                all_TERs = set(relations)
             else:
-                common_relations = common_relations & set(relations)
-                all_relations = all_relations | set(relations)
+                common_TERs = common_TERs & set(relations)
+                all_TERs = all_TERs | set(relations)
 
-        #edata.uns['rank_genes_groups'] = pd.concat(df_list)
-        edata.uns[f'common_trend_relations'] = list(common_relations)
-        edata.uns[f'all_trend_relations'] = list(all_relations)
+        df = pd.DataFrame(trend_list)
+        df.to_csv(f'{self.out_dir}/{per_group}_TER.csv', index=False)
+        edata.uns[f'{per_group}_TER'] = df
+        edata.uns[f'common_TER'] = list(common_TERs)
+        edata.uns[f'all_TER'] = list(all_TERs)
         return
 
     def test_val_trend_entropy(self, relations, method='pearson', p_cutoff=0.05):
@@ -414,46 +453,52 @@ class SNIEE():
                 candidates.append(relation)    
         print(method, 'val trend before', len(relations), 'after', len(candidates))        
         return candidates
-    
-    def _enrich_for_top_n(self, args):
-        top_n, relation_list, gene_sets, organism = args
-        print('_enrich_for_top_n', top_n, gene_sets)
-
+          
+    def _enrich_for_top_n(self, top_n, relation_list, gene_sets, organism, background):
+        print('_enrich_for_top_n', top_n)
         gene_list = list(set(np.array([x.split('_') for x in relation_list[:top_n]]).reshape(-1)))
         enr = gp.enrichr(gene_list=gene_list, gene_sets=gene_sets,
-                         background=self.adata.var_names, organism=organism, outdir=None)
+                         background=background, 
+                         organism=organism, 
+                         outdir=None)
         df = enr.results
         df['n_gene'] = df['Genes'].apply(lambda x: len(x.split(';')))
         df['top_n'] = top_n
         df['top_n_ratio'] = df['n_gene'] / top_n
         return top_n, enr, df
 
-    def pathway_enrich(self, n_top_relations=100, n_space=10, 
-                       method='pearson', test_type='trend',
+    def pathway_enrich(self, n_top_relations=None, n_space=10, 
+                       method='pearson', test_type='TER',
                        gene_sets=['KEGG_2021_Human', 
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'],
+                       background=None,
                        organism='human', plot=True):
-        relation_list = self.edata.uns[f'{method}_{test_type}_relations']
+        relation_list = self.edata.uns[f'{method}_{test_type}']
         enr_dict = {}
         df_list = []
-        print(relation_list)
-        # Prepare arguments for parallel processing
-        args_list = [(top_n, relation_list, gene_sets, organism) for top_n in range(10, n_top_relations + 1, n_space)]
 
-        # Use multiprocessing Pool to run the enrichment in parallel
-        with Pool(processes=self.n_threads) as pool:
-            results = pool.map(self._enrich_for_top_n, args_list)
+        if n_top_relations is None:
+            n_top_relations = len(relation_list)
 
-        # Collect results
-        for top_n, enr, df in results:
-            enr_dict[top_n] = enr
-            df_list.append(df)
+        args_list = [(top_n, relation_list, gene_sets, organism, background) for top_n in range(10, n_top_relations + 1, n_space)]
+
+        with ProcessPoolExecutor(max_workers=self.n_threads) as executor:
+            futures = {executor.submit(self._enrich_for_top_n, *args): args[0] for args in args_list}
+
+            for future in as_completed(futures):
+                top_n = futures[future]
+                try:
+                    top_n, enr, df = future.result()
+                    enr_dict[top_n] = enr
+                    df_list.append(df)
+                except Exception as exc:
+                    print(f'Top_n {top_n} generated an exception: {exc}')
 
         df = pd.concat(df_list)
-        self.edata.uns[f'{method}_enrich_res'] = enr_dict
-        self.edata.uns[f'{method}_enrich_df'] = df
-          
+        df.to_csv(f'{self.out_dir}/{method}_{test_type}_enrich.csv', index=False)
+        self.edata.uns[f'{method}_{test_type}_enrich_res'] = enr_dict
+        self.edata.uns[f'{method}_{test_type}_enrich_df'] = df
 
     def annot_perputation(self, n_neighbors=10, n_cluster=2, plot_label=[],
                           method='all',

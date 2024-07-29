@@ -6,17 +6,18 @@ from pyvis.network import Network
 import networkx as nx
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
-from src.util import set_adata_obs
+from src.util import set_adata_obs, print_msg
 import os, random
 
-def relation_score(sniee_obj, method='pearson', test_type='trend', groupby=None,
-                   relations=None, unit_header='patient',
+
+def relation_score(sniee_obj, method='pearson', test_type='TER', groupby=None,
+                   relations=None, unit_header='subject',
                    title='', out_prefix='test',
                    ax=None):
     edata = sniee_obj.edata
     df = edata.obs.copy()
     if relations is None:
-        relations = edata.uns[f'{method}_{test_type}_relations']
+        relations = edata.uns[f'{method}_{test_type}']
     else:
         relations = [x for x in relations if x in edata.var_names]
 
@@ -25,6 +26,8 @@ def relation_score(sniee_obj, method='pearson', test_type='trend', groupby=None,
         groupby = sniee_obj.groupby
     sns.lineplot(df, x='time', y='score', hue=groupby, #units=unit_header, estimator=None,
                  ax=ax)
+    
+    title += f'{sniee_obj.dataset} {method} entropy score of {len(relations)} {test_type}s '
     if ax is not None:
         ax.set_title(title)
     elif out_prefix:
@@ -35,14 +38,15 @@ def relation_score(sniee_obj, method='pearson', test_type='trend', groupby=None,
         plt.title(title)
         plt.show()
 
-def get_landscape_score(sniee_obj, relations, method = 'pearson', subject_header = 'patient',
-                        out_prefix='./out/prefix'):
-    our_dir = os.path.dirname(out_prefix)
-    if not os.path.exists(our_dir):
-        os.makedirs(our_dir)
-
+def get_landscape_score(sniee_obj, relations=None, 
+                        method='pearson', test_type='TER',
+                        subject_header='subject'):
     edata = sniee_obj.edata
-    adata = sniee_obj.adata
+
+    if relations is None:
+        relations = edata.uns[f'{method}_{test_type}']
+    else:
+        relations = [x for x in relations if x in edata.var_names]
 
     subjects = edata.obs[subject_header].unique()
     times = np.sort(edata.obs['time'].unique())
@@ -56,10 +60,10 @@ def get_landscape_score(sniee_obj, relations, method = 'pearson', subject_header
         X[:] = np.nan
         X[:, t_is] = sedata[:, relations].layers[f'{method}_entropy'].T
         df = pd.DataFrame(X, columns=times, index=relations)
-        df.to_csv(f'{out_prefix}_{subject}_landscape.csv')
+        df.to_csv(f'{sniee_obj.out_dir}/{subject}_{method}_{test_type}{len(relations)}_landscape.csv')
 
         #sns.heatmap(df, cmap='RdYlBu_r', robust=True)
-        #plt.title(f'delta entropy score for patient {subject}')
+        #plt.title(f'delta entropy score for subject {subject}')
         #plt.show()
 
 
@@ -134,7 +138,7 @@ def generate_landscape_images(folder_path, output_path, robust=False, scale=Fals
 
 
 def relation_score_boxplot(sniee_obj, groupby=None, 
-                           relation_type='common_trend_relations',
+                           relation_type='common_TER',
                            method='pearson',
                            title=''):
     edata = sniee_obj.edata
@@ -207,11 +211,18 @@ def investigate_relation(sniee_obj, relation, groupby='group',
     plt.show()
 
 
-def pathway_dynamic(sniee_obj, method='all', p_cutoff=0.05, n_top_pathway=20):
-    df = sniee_obj.edata.uns[f'{method}_enrich_df'] 
-    df = df[df['Adjusted P-value'] < p_cutoff]
+def pathway_dynamic(sniee_obj, method='pearson', test_type='TER',
+                    p_adjust=True, p_cutoff=0.05, n_top_pathway=30, 
+                    n_top_relations=500):
+    df = sniee_obj.edata.uns[f'{method}_{test_type}_enrich_df'] 
 
-    for gene_set in df['Gene_set'].unique():
+    if p_adjust:
+        df = df[df['Adjusted P-value'] < p_cutoff]
+    else:
+        df = df[df['P-value'] < p_cutoff]
+    df = df[df['top_n'] <= n_top_relations]
+
+    for gene_set in set(df['Gene_set'].unique()):
         tmp = df[df['Gene_set'] == gene_set]
         tmp = pd.pivot(tmp[['top_n', 'Term', 'top_n_ratio']].drop_duplicates(), index='Term', columns='top_n', values='top_n_ratio')
         idx = tmp.sum(axis=1).sort_values(ascending=False).index
@@ -221,20 +232,20 @@ def pathway_dynamic(sniee_obj, method='all', p_cutoff=0.05, n_top_pathway=20):
         plt.show()  
 
 
-def draw_gene_network(sniee_obj, method='pearson', test_type='trend',
-                    n_top_relations=100,
-                      cmap='viridis', html_fn="gene_network.html"):
+def draw_gene_network(sniee_obj, per_group,
+                      method='pearson', test_type='TER',
+                      n_top_relations=100,
+                    cmap='viridis'):
     net = Network(notebook=True, cdn_resources='in_line')
-    
-    df = sniee_obj.edata.uns['rank_genes_groups']
-    df = df[df.method == method]
+    df = sniee_obj.edata.uns[f'{per_group}_DER']
+    df = df[(df.method == method) & df['DER']]
     df.index = df.names
     gene2pvals_adj = df['pvals_adj'].to_dict()
     gene2pvals = df['pvals'].to_dict()
     gene2scores = df['scores'].to_dict()
     gene2logfoldchanges = df['logfoldchanges'].to_dict()
     
-    relation_list = sniee_obj.edata.uns[f'{method}_{test_type}_relations'][:n_top_relations]
+    relation_list = sniee_obj.edata.uns[f'{method}_{test_type}'][:n_top_relations]
 
     weights = [ gene2scores[relation] for relation in relation_list]
     norm = mcolors.Normalize(vmin=min(weights), vmax=max(weights), clip=True)
@@ -257,6 +268,9 @@ def draw_gene_network(sniee_obj, method='pearson', test_type='trend',
                      title=title, 
                      color=hex_color)
 
+    html_fn = f'{sniee_obj.out_dir}/{method}_{test_type}{len(relation_list)}_gene_network.html'
+    print_msg(f'[Output] Relation network has saved to {html_fn}.')
+
     net.show(html_fn)
 
 
@@ -264,7 +278,7 @@ def draw_relation_heatmap(sniee_obj, method='pearson',
                           n_top_relations=100,
                           cmap='viridis'):    
     
-    relation_list = sniee_obj.edata.uns[f'{method}_trend_relations'][:n_top_relations]
+    relation_list = sniee_obj.edata.uns[f'{method}_TER'][:n_top_relations]
     for relation in relation_list:
         gene1, gene2 = relation.split('_')
         # to be continued
