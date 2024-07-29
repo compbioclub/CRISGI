@@ -27,7 +27,7 @@ def relation_score(sniee_obj, method='pearson', test_type='TER', groupby=None,
     sns.lineplot(df, x='time', y='score', hue=groupby, #units=unit_header, estimator=None,
                  ax=ax)
     
-    title += f'{sniee_obj.dataset} {method} entropy score of {len(relations)} {test_type}s '
+    title += f'{sniee_obj.dataset}\n{method} entropy score of {len(relations)} {test_type}s '
     if ax is not None:
         ax.set_title(title)
     elif out_prefix:
@@ -40,7 +40,8 @@ def relation_score(sniee_obj, method='pearson', test_type='TER', groupby=None,
 
 def get_landscape_score(sniee_obj, relations=None, 
                         method='pearson', test_type='TER',
-                        subject_header='subject'):
+                        subject_header='subject',
+                        out_dir=None):
     edata = sniee_obj.edata
 
     if relations is None:
@@ -60,7 +61,9 @@ def get_landscape_score(sniee_obj, relations=None,
         X[:] = np.nan
         X[:, t_is] = sedata[:, relations].layers[f'{method}_entropy'].T
         df = pd.DataFrame(X, columns=times, index=relations)
-        fn = f'{sniee_obj.out_dir}/{subject}_{method}_{test_type}{len(relations)}_landscape.csv'
+        if out_dir is None:
+            out_dir = sniee_obj.out_dir
+        fn = f'{out_dir}/{subject}_{method}_{test_type}{len(relations)}_landscape.csv'
         df.to_csv(fn)
         print_msg(f'[Output] The subject {subject} {method} {test_type}{len(relations)} entropy scores are saved to:\n{fn}')
 
@@ -233,8 +236,10 @@ def pathway_dynamic(sniee_obj, method='pearson', test_type='TER',
         tmp = tmp.T[idx].T.head(n_top_pathway)
         sns.heatmap(tmp, yticklabels=1)
         plt.title(gene_set)
-        plt.show()  
-
+        fn = f'{sniee_obj.out_dir}/{method}_{test_type}_{gene_set}_enrich_top_n.png'
+        plt.savefig(fn)
+        print_msg(f'[Output] The {method} {test_type} {gene_set} top_n enrichment is saved to:\n{fn}')
+        plt.show()
 
 def draw_gene_network(sniee_obj, per_group,
                       method='pearson', test_type='TER',

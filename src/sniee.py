@@ -443,19 +443,35 @@ class SNIEE():
         edata.uns[f'all_TER'] = list(all_TERs)
         return
 
-    def test_val_trend_entropy(self, relations, method='pearson', p_cutoff=0.05):
+    def test_val_trend_entropy(self, relations, method='pearson', p_cutoff=0.05,
+                               out_prefix='./test'):
         adata = self.adata
         edata = self.edata
         candidates = []
+        trend_list = []
         for relation in relations:
             if relation not in self.edata.var_names:
                 continue
-            is_up = self._test_up_trend(relation, adata, edata, method=method, p_cutoff=p_cutoff)
-            is_zero = self._test_zero_trend(relation, adata, edata, method=method, p_cutoff=p_cutoff)
+            up_res = self._test_up_trend(relation, adata, edata, method=method, p_cutoff=p_cutoff)
+            is_up = up_res['trend'] == 'increasing'
+            zero_res = self._test_zero_trend(relation, adata, edata, method=method, p_cutoff=p_cutoff)
+            is_zero = zero_res['p_value'] < p_cutoff 
+            up_res.update(zero_res)
 
-            if is_up or is_zero:
-                candidates.append(relation)    
+            is_TER = is_up or is_zero    
+            up_res['TER'] = is_TER
+
+            trend_list.append(up_res)
+            if is_TER:
+                candidates.append(relation)  
+
         print(method, 'val trend before', len(relations), 'after', len(candidates))        
+
+        df = pd.DataFrame(trend_list)
+        fn = f'{out_prefix}_TER.csv'
+        df.to_csv(fn, index=False)
+        print_msg(f'[Output] The validation trend expressed relation (TER) statistics are saved to:\n{fn}')
+                       
         return candidates
           
     def _enrich_for_top_n(self, top_n, relation_list, gene_sets, organism, background):
