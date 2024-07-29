@@ -71,7 +71,7 @@ class SNIEE():
     def save(self):
         pk_fn = f'{self.out_dir}/{self.dataset}_sniee_obj.pk'
         pickle.dump(self, open(pk_fn, 'wb'))        
-        print_msg(f'[Output] SNIEE object has saved to {pk_fn}.')
+        print_msg(f'[Output] SNIEE object has saved to:\n{pk_fn}')
 
     def load_bg_net(self, genes):
         
@@ -372,7 +372,9 @@ class SNIEE():
         else:
             df = df.sort_values(by=['DER', sortby], ascending=[False, True])
 
-        df.to_csv(f'{self.out_dir}/{per_group}_DER.csv', index=False)
+        fn = f'{self.out_dir}/{per_group}_DER.csv'
+        df.to_csv(fn, index=False)
+        print_msg(f'[Output] The differential expressed relation (DER) statistics are saved to:\n{fn}')
         edata.uns[f'{per_group}_DER'] = df
         edata.uns[f'common_DER'] = list(common_DERs)
         edata.uns[f'all_DER'] = list(all_DERs)
@@ -433,7 +435,9 @@ class SNIEE():
                 all_TERs = all_TERs | set(relations)
 
         df = pd.DataFrame(trend_list)
-        df.to_csv(f'{self.out_dir}/{per_group}_TER.csv', index=False)
+        fn = f'{self.out_dir}/{per_group}_TER.csv'
+        df.to_csv(fn, index=False)
+        print_msg(f'[Output] The trend expressed relation (TER) statistics are saved to:\n{fn}')
         edata.uns[f'{per_group}_TER'] = df
         edata.uns[f'common_TER'] = list(common_TERs)
         edata.uns[f'all_TER'] = list(all_TERs)
@@ -496,7 +500,10 @@ class SNIEE():
                     print(f'Top_n {top_n} generated an exception: {exc}')
 
         df = pd.concat(df_list)
-        df.to_csv(f'{self.out_dir}/{method}_{test_type}_enrich.csv', index=False)
+        fn = f'{self.out_dir}/{method}_{test_type}_enrich.csv'
+        df.to_csv(fn, index=False)
+        print_msg(f'[Output] The {method} {test_type} enrich statistics are saved to:\n{fn}')
+
         self.edata.uns[f'{method}_{test_type}_enrich_res'] = enr_dict
         self.edata.uns[f'{method}_{test_type}_enrich_df'] = df
 

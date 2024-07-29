@@ -60,7 +60,9 @@ def get_landscape_score(sniee_obj, relations=None,
         X[:] = np.nan
         X[:, t_is] = sedata[:, relations].layers[f'{method}_entropy'].T
         df = pd.DataFrame(X, columns=times, index=relations)
-        df.to_csv(f'{sniee_obj.out_dir}/{subject}_{method}_{test_type}{len(relations)}_landscape.csv')
+        fn = f'{sniee_obj.out_dir}/{subject}_{method}_{test_type}{len(relations)}_landscape.csv'
+        df.to_csv(fn)
+        print_msg(f'[Output] The subject {subject} {method} {test_type}{len(relations)} entropy scores are saved to:\n{fn}')
 
         #sns.heatmap(df, cmap='RdYlBu_r', robust=True)
         #plt.title(f'delta entropy score for subject {subject}')
@@ -78,7 +80,7 @@ def generate_landscape_images(folder_path, output_path, robust=False, scale=Fals
     scale (bool): If True, scale all heatmaps to the same color range. Default is False.
     """
     # Get all CSV file names in the folder
-    csv_files = [f for f in os.listdir(folder_path) if f.endswith('_landscape.csv')]
+    csv_files = [f for f in os.listdir(folder_path) if f.endswith('landscape.csv')]
 
     if scale:
         # Initialize variables to store global min and max values
@@ -132,6 +134,8 @@ def generate_landscape_images(folder_path, output_path, robust=False, scale=Fals
             # Save the heatmap as a PNG file with a transparent background
             output_file = os.path.join(output_path, os.path.splitext(file_name)[0] + f'_rep{i}.png')
             plt.savefig(output_file, transparent=True, bbox_inches='tight', pad_inches=0, dpi=dpi)
+            print_msg(f'[Output] The lanscape image is saved to:\n{output_file}')
+
             plt.close()
 
 
@@ -269,7 +273,7 @@ def draw_gene_network(sniee_obj, per_group,
                      color=hex_color)
 
     html_fn = f'{sniee_obj.out_dir}/{method}_{test_type}{len(relation_list)}_gene_network.html'
-    print_msg(f'[Output] Relation network has saved to {html_fn}.')
+    print_msg(f'[Output] Relation network has saved to:\n{html_fn}')
 
     net.show(html_fn)
 
