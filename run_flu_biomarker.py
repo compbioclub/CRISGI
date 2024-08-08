@@ -75,7 +75,7 @@ def process_top_n_relations(
             p_cutoff=0.05,
             out_prefix=f"{out_dir}/{flag}_{val_dataset}",
         )
-        pl.get_landscape_score(val_sniee_obj, filtered_relations, out_dir=out_dir)
+        pl.get_landscape_score(val_sniee_obj, filtered_relations, method=method, out_dir=out_dir)
         pl.generate_landscape_images(
             folder_path=out_dir,
             output_path=out_dir,
@@ -86,6 +86,7 @@ def process_top_n_relations(
         for col in plot_label:
             pl.relation_score(
                 val_sniee_obj,
+                method=method,
                 groupby=col,
                 relations=filtered_relations,
                 test_type=test_type,
