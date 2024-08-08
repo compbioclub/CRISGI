@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import anndata as ad
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, coo_matrix
 from scipy.stats import spearmanr, ttest_1samp
 from pyseat.SEAT import SEAT
 import seaborn as sns
@@ -25,6 +25,7 @@ from src.util import print_msg, get_array, set_adata_var, set_adata_obs
 class SNIEE():
 
     def __init__(self, adata, bg_net=None, bg_net_score_cutoff=850,
+                 genes=None,
                  n_top_genes=5000, n_threads=5,
                  relation_methods=['pearson', 'spearman', 'pos_coexp', 'neg_coexp'],
                  dataset='test',
@@ -43,11 +44,15 @@ class SNIEE():
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
         self.out_dir = out_dir
-        self.preprocess_adata(n_top_genes=n_top_genes)
+        if n_top_genes is not None:
+            self.preprocess_adata(n_top_genes=n_top_genes)
 
         if 'bg_net' not in adata.varm:
             if bg_net is None:
-                genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
+                if genes is None:
+                    genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
+                else:
+                    genes = genes.sort_values()
                 self.adata = self.adata[:, genes]
                 bg_net, _ = self.load_bg_net(genes)
         else:
@@ -137,6 +142,79 @@ class SNIEE():
         sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
         sc.tl.umap(adata, random_state=random_state)
 
+    def calculate_entropy(self, ref_obs, per_obss, layer='log1p'):
+        if 'prod' in self.relation_methods:
+            self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
+        else:
+            self._calculate_entropy(ref_obs, per_obss)
+
+    def _calculate_entropy_by_prod(self, ref_obs, per_obss, layer='log1p'):
+        adata = self.adata
+        bg_net = adata.varm['bg_net']
+        row, col = bg_net.nonzero()
+
+        ref_obs_is = adata[ref_obs, :].obs.i.tolist()
+        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
+        X = get_array(adata, layer=layer)
+        N, M = X.shape
+        entropy_matrix = np.zeros((N, self.adata.varm['bg_net'].count_nonzero()))
+        edata = ad.AnnData(entropy_matrix)
+        edata.obs = adata.obs
+        edata.var_names = adata.var_names[row] + '_' + adata.var_names[col]
+        edata.var['gene1'] = adata.var_names[row]
+        edata.var['gene2'] = adata.var_names[col]
+        edata.var['gene1_i'] = row
+        edata.var['gene2_i'] = col
+
+        #R = np.einsum('ij,ik->ijk', X, X)
+        ref_R_sum = np.zeros((M, M))
+        for i in ref_obs_is:
+            for j, k in zip(row, col):
+                ref_R_sum[j, k] += X[i, j] * X[i, k]
+
+        gene_std = X[ref_obs_is].std(axis=0)
+        ref_relation_std = (gene_std[row]+gene_std[col])/2
+
+        ref_R_sparse = csr_matrix((ref_R_sum[row, col]/(len(ref_obs_is)), (row, col)), shape = (M, M))
+        ref_relation_entropy = self.sparseR2entropy(ref_R_sparse)
+        
+        for per_obs_is in per_obss_is:
+            R = np.zeros((M, M))
+            for i in per_obs_is:
+                for j, k in zip(row, col):
+                    R[j, k] = X[i, j] * X[i, k] + ref_R_sum[j, k]       
+            R = csr_matrix((R[row, col]/(len(ref_obs_is) + len(per_obs_is)), (row, col)), shape = (M, M))
+            per_relation_entropy = self.sparseR2entropy(R)
+            delta_entropy = np.abs(per_relation_entropy - ref_relation_entropy)
+        
+            gene_std = X[ref_obs_is + per_obs_is].std(axis=0)
+            per_relation_std = (gene_std[row]+gene_std[col])/2
+            delta_std = np.abs(per_relation_std - ref_relation_std)
+            edata.X[i, :] = delta_entropy * delta_std
+
+        edata.layers['prod_entropy'] = edata.X
+        self.edata = edata
+
+    def sparseR2entropy(self, R):
+        R_sum = R.sum(axis=0)
+        R_sum[R_sum == 0] = 1  # TBD, speed up
+        prob = R/R_sum
+        #print_msg(f'prob min {prob.min()} max {prob.max()}')
+        row, col = prob.nonzero()
+        tmp = np.array(prob.todense()[row, col]).reshape(-1)
+        val = - tmp * np.log(tmp)
+        entropy_matrix = csr_matrix((val, (row, col)), shape = R.shape)
+        #print_msg(f'{method}_init_entropy min {entropy_matrix.min()} max {entropy_matrix.max()}')
+        #adata.varm[f'{method}_init_entropy'] = entropy_matrix
+        n_neighbors = np.array((R != 0).sum(axis=0))
+        norm = np.log(n_neighbors)
+        norm[n_neighbors == 0] = 1
+        norm[n_neighbors == 1] = 1
+        gene_entropy = (np.array(entropy_matrix.sum(axis=0))/norm).reshape(-1)
+        #adata.var[f'{method}_entropy'] = entropy.reshape(-1)
+        relation_entropy = (gene_entropy[row]+gene_entropy[col])/2
+        return relation_entropy
+
     def _std(self, adata):
         X = get_array(adata, layer='log1p')
         set_adata_var(adata, 'std', X.std(axis=0))
@@ -176,8 +254,8 @@ class SNIEE():
             R = np.dot(X.T, X.max() - X)/X.shape[0]
         print_msg(f'{method} size {R.shape} min { R.min()} max {R.max()}')
         return R
-    
-    def calculate_entropy(self, ref_obs, per_obss):
+
+    def _calculate_entropy(self, ref_obs, per_obss):
         adata_dict = {}
         print_msg(f'---Calculating the group entropy for reference')
         adata = self._calculate_group_entropy(ref_obs)
@@ -189,7 +267,9 @@ class SNIEE():
             adata_dict[','.join(per_obs)] = adata
         self.adata_dict = adata_dict
 
-    def calculate_delta_entropy(self, ref_obs, per_obss):
+        self._calculate_delta_entropy(ref_obs, per_obss)
+
+    def _calculate_delta_entropy(self, ref_obs, per_obss):
         self.per_obss = per_obss
         self.ref_obs = ref_obs
         adata_dict = self.adata_dict 
@@ -364,7 +444,7 @@ class SNIEE():
                 all_DERs = set(relations)
             else:
                 common_DERs = common_DERs & set(relations)
-                all_DERs = all_DERs | set(relations)
+                all_DERs = all_DERs | set(relations)                
         
         df = pd.concat(df_list)
         if sortby in ['logfoldchanges', 'scores']:

@@ -24,10 +24,14 @@ def relation_score(sniee_obj, method='pearson', test_type='TER', groupby=None,
     df['score'] = edata[:, relations].layers[f'{method}_entropy'].sum(axis=1)
     if groupby is None:
         groupby = sniee_obj.groupby
-    sns.lineplot(df, x='time', y='score', hue=groupby, #units=unit_header, estimator=None,
-                 ax=ax)
-    
-    title += f'{sniee_obj.dataset}\n{method} entropy score of {len(relations)} {test_type}s '
+    if unit_header is not None:
+        sns.lineplot(df, x='time', y='score', hue=groupby, units=unit_header, estimator=None,
+                     ax=ax)
+    else:
+        sns.lineplot(df, x='time', y='score', hue=groupby, 
+                     ax=ax)
+                
+    title += f'{sniee_obj.dataset} {method} entropy score of {len(relations)} {test_type}s '
     if ax is not None:
         ax.set_title(title)
     elif out_prefix:
