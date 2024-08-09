@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 import pickle
+from itertools import chain
 import gseapy as gp
 import pymannkendall as mk
 from multiprocessing import Pool
@@ -26,7 +27,9 @@ class SNIEE():
 
     def __init__(self, adata, bg_net=None, bg_net_score_cutoff=850,
                  genes=None,
-                 n_top_genes=5000, n_threads=5,
+                 n_hvg=5000, 
+                 relations=None,
+                 n_threads=5,
                  relation_methods=['pearson', 'spearman', 'pos_coexp', 'neg_coexp'],
                  dataset='test',
                  out_dir='./out'
@@ -44,42 +47,51 @@ class SNIEE():
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
         self.out_dir = out_dir
-        if n_top_genes is not None:
-            self.preprocess_adata(n_top_genes=n_top_genes)
 
-        if 'bg_net' not in adata.varm:
+        if n_hvg is not None:
+            self.preprocess_adata(n_hvg=n_hvg)
+
+        if relations is not None:
+            bg_net = self.load_bg_net_from_relations(relations)
+            self.adata.varm['bg_net'] = bg_net
+
+        if 'bg_net' not in self.adata.varm:
             if bg_net is None:
                 if genes is None:
                     genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
                 else:
-                    genes = genes.sort_values()
+                    genes = np.sort(genes)
                 self.adata = self.adata[:, genes]
-                bg_net, _ = self.load_bg_net(genes)
+                bg_net, _ = self.load_bg_net_from_genes(genes)
         else:
             bg_net = csr_matrix(np.triu(self.adata.varm['bg_net']))
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
-
-    '''
-    def analysis(self, ref_obs, per_obss, ref_groupby, ref_group, plot_label, method,
-                 n_top_relations=100, plot=True):
-        self.calculate_entropy(ref_obs, per_obss)
-        self.calculate_delta_entropy(ref_obs, per_obss)
-        self.test_diff_entropy(groupby=None, ref_groupby=ref_groupby, ref_group=ref_group,
-                               plot_label=plot_label)
-        self.get_diff_relations(per_group=self.per_like_group, n_top_relations=n_top_relations, plot=plot)
-        self.test_trend_entropy(per_group=self.per_like_group)
-
-        #self.pathway_enrich(n_top_relations=n_top_relations, method=method)
-    '''
 
     def save(self):
         pk_fn = f'{self.out_dir}/{self.dataset}_sniee_obj.pk'
         pickle.dump(self, open(pk_fn, 'wb'))        
         print_msg(f'[Output] SNIEE object has saved to:\n{pk_fn}')
 
-    def load_bg_net(self, genes):
+    def load_bg_net_from_relations(self, relations):
+        print_msg('load bg_net by looping relations.')
+        genes = np.array([r.split('_') for r in relations]).reshape(-1)
+        genes = [g for g in genes if g in self.adata.var_names]
+        if not genes:
+            raise ValueError('The genes in given relations do not exists in adata!')
         
+        genes = np.sort(genes)
+        self.adata = self.adata[:, genes]
+        gene2i = {g: i for i, g in enumerate(genes)}
+
+        bg_net = np.zeros((len(genes), len(genes)))
+        for r in relations:
+            gene1, gene2 = r.split('_')
+            if gene1 in genes and gene2 in genes:
+                bg_net[gene2i[gene1], gene2i[gene2]] = 1
+        return bg_net
+    
+    def load_bg_net_from_genes(self, genes):
         if (genes != np.sort(genes)).any():    
             raise ValueError('The genes should be sorted!')
         
@@ -134,84 +146,108 @@ class SNIEE():
                 relations.append(f'{gene1}_{gene2}')
         return bg_net, relations
 
-    def preprocess_adata(self, n_top_genes=5000, random_state=0, n_pcs=30, n_neighbors=10):
+    def preprocess_adata(self, n_hvg=5000, random_state=0, n_pcs=30, n_neighbors=10):
         adata = self.adata
         #sc.pp.scale(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes, flavor='cell_ranger')
+        sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='cell_ranger')
         sc.tl.pca(adata)
         sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
         sc.tl.umap(adata, random_state=random_state)
 
-    def calculate_entropy(self, ref_obs, per_obss, layer='log1p'):
-        if 'prod' in self.relation_methods:
-            self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
-        else:
-            self._calculate_entropy(ref_obs, per_obss)
-
-    def _calculate_entropy_by_prod(self, ref_obs, per_obss, layer='log1p'):
+    def init_edata(self, per_obss):
+        adata = self.adata
+        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
         adata = self.adata
         bg_net = adata.varm['bg_net']
         row, col = bg_net.nonzero()
-
-        ref_obs_is = adata[ref_obs, :].obs.i.tolist()
-        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
-        X = get_array(adata, layer=layer)
-        N, M = X.shape
-        entropy_matrix = np.zeros((N, self.adata.varm['bg_net'].count_nonzero()))
-        edata = ad.AnnData(entropy_matrix)
-        edata.obs = adata.obs
+        per_n = len(per_obss_is)
+        relation_n = bg_net.count_nonzero()
+        edata = ad.AnnData(np.zeros((per_n, relation_n)))
+        per_obs = list(chain.from_iterable(per_obss))
+        df = adata[per_obs, :].obs[['test', 'subject', 'time', 'symptom']].copy().drop_duplicates()
+        df.index = df['test']
+        edata.obs = df
         edata.var_names = adata.var_names[row] + '_' + adata.var_names[col]
         edata.var['gene1'] = adata.var_names[row]
         edata.var['gene2'] = adata.var_names[col]
         edata.var['gene1_i'] = row
         edata.var['gene2_i'] = col
+        self.edata = edata
+        print_msg(f'Init edata with obs {edata.shape[0]} and relation {edata.shape[1]}')
 
-        #R = np.einsum('ij,ik->ijk', X, X)
-        ref_R_sum = np.zeros((M, M))
-        for i in ref_obs_is:
-            for j, k in zip(row, col):
-                ref_R_sum[j, k] += X[i, j] * X[i, k]
+    def calculate_entropy(self, ref_obs, per_obss, layer='log1p'):
+        print('reference observations', len(ref_obs))
+        print('perputation groups', len(per_obss))
+
+        self.init_edata(per_obss)
+
+        if 'prod' in self.relation_methods:
+            self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
+        else:
+            self._calculate_entropy(ref_obs, per_obss)
+
+    def _prod(self, X, obs_is, row, col, obs_cutoff=1000):
+        N, M = X.shape
+        if N > obs_cutoff:
+            X_tmp = X[obs_is,:]
+            R = np.dot(X_tmp.T, X_tmp)
+        else:
+            R = np.zeros((M, M))
+            for i in obs_is:
+                for j, k in zip(row, col):
+                    R[j, k] += X[i, j] * X[i, k]
+        return R
+
+    def _calculate_entropy_by_prod(self, ref_obs, per_obss, layer='log1p',
+                                   obs_cutoff=1000):
+        adata = self.adata
+        edata = self.edata
+
+        bg_net = adata.varm['bg_net']
+        row, col = bg_net.nonzero()
+
+        ref_obs_is = adata[ref_obs, :].obs.i.tolist()
+        ref_n = len(ref_obs_is)
+        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
+        X = get_array(adata, layer=layer)
+        N, M = X.shape
 
         gene_std = X[ref_obs_is].std(axis=0)
         ref_relation_std = (gene_std[row]+gene_std[col])/2
 
-        ref_R_sparse = csr_matrix((ref_R_sum[row, col]/(len(ref_obs_is)), (row, col)), shape = (M, M))
-        ref_relation_entropy = self.sparseR2entropy(ref_R_sparse)
+        print_msg(f'---Calculating the entropy for reference group')
+        ref_R_sum = self._prod(X, ref_obs_is, row, col, obs_cutoff=obs_cutoff)
+        ref_R_sparse = csr_matrix((ref_R_sum[row, col]/(ref_n), (row, col)), shape = (M, M))
+        ref_relation_entropy = self.sparseR2entropy(ref_R_sparse, row, col)
         
-        for per_obs_is in per_obss_is:
-            R = np.zeros((M, M))
-            for i in per_obs_is:
-                for j, k in zip(row, col):
-                    R[j, k] = X[i, j] * X[i, k] + ref_R_sum[j, k]       
-            R = csr_matrix((R[row, col]/(len(ref_obs_is) + len(per_obs_is)), (row, col)), shape = (M, M))
-            per_relation_entropy = self.sparseR2entropy(R)
+        for per_i, per_obs_is in enumerate(per_obss_is):
+            print_msg(f'---Calculating the entropy for pertutation group {per_i}, observations {len(per_obs_is)}')
+            R = self._prod(X, per_obs_is, row, col, obs_cutoff=obs_cutoff)
+            R = csr_matrix(((R[row, col]+ref_R_sum[row, col])/(ref_n + len(per_obs_is)), (row, col)), shape = (M, M))
+            per_relation_entropy = self.sparseR2entropy(R, row, col)
             delta_entropy = np.abs(per_relation_entropy - ref_relation_entropy)
         
             gene_std = X[ref_obs_is + per_obs_is].std(axis=0)
             per_relation_std = (gene_std[row]+gene_std[col])/2
             delta_std = np.abs(per_relation_std - ref_relation_std)
-            edata.X[i, :] = delta_entropy * delta_std
+            edata.X[per_i, :] = delta_entropy * delta_std
 
         edata.layers['prod_entropy'] = edata.X
         self.edata = edata
 
-    def sparseR2entropy(self, R):
+    def sparseR2entropy(self, R, row, col):
         R_sum = R.sum(axis=0)
         R_sum[R_sum == 0] = 1  # TBD, speed up
         prob = R/R_sum
-        #print_msg(f'prob min {prob.min()} max {prob.max()}')
-        row, col = prob.nonzero()
-        tmp = np.array(prob.todense()[row, col]).reshape(-1)
+        prob_row, prob_col = prob.nonzero()
+        tmp = np.array(prob.todense()[prob_row, prob_col]).reshape(-1)
         val = - tmp * np.log(tmp)
-        entropy_matrix = csr_matrix((val, (row, col)), shape = R.shape)
-        #print_msg(f'{method}_init_entropy min {entropy_matrix.min()} max {entropy_matrix.max()}')
-        #adata.varm[f'{method}_init_entropy'] = entropy_matrix
+        entropy_matrix = csr_matrix((val, (prob_row, prob_col)), shape = R.shape)
         n_neighbors = np.array((R != 0).sum(axis=0))
         norm = np.log(n_neighbors)
         norm[n_neighbors == 0] = 1
         norm[n_neighbors == 1] = 1
         gene_entropy = (np.array(entropy_matrix.sum(axis=0))/norm).reshape(-1)
-        #adata.var[f'{method}_entropy'] = entropy.reshape(-1)
         relation_entropy = (gene_entropy[row]+gene_entropy[col])/2
         return relation_entropy
 
@@ -396,10 +432,10 @@ class SNIEE():
             groupby = 'seat_cluster'
 
         self.groupby = groupby
-        adata = self.adata
+        #adata = self.adata
         edata = self.edata
-        edata.obs = adata[edata.obs_names].obs
-        edata.obsm['X_umap'] = adata[edata.obs_names].obsm['X_umap']        
+        #edata.obs = adata[edata.obs_names].obs
+        #edata.obsm['X_umap'] = adata[edata.obs_names].obsm['X_umap']        
         for method in self.relation_methods:
             sc.tl.rank_genes_groups(edata, layer=f'{method}_entropy',
                                     groupby=groupby, method="wilcoxon")
@@ -461,8 +497,8 @@ class SNIEE():
         # sort the all and common relations, to be continued
         return
     
-    def _test_up_trend(self, relation, adata, edata, method='pearson', p_cutoff=0.05):
-        sorted_samples = adata.obs.sort_values(by=['time']).index.tolist()
+    def _test_up_trend(self, relation, group_edata, edata, method='pearson', p_cutoff=0.05):
+        sorted_samples = group_edata.obs.sort_values(by=['time']).index.tolist()
         val = edata[sorted_samples, relation].layers[f'{method}_entropy'].reshape(-1)
         res = mk.original_test(val, alpha=p_cutoff)
         # https://pypi.org/project/pymannkendall/
@@ -473,8 +509,8 @@ class SNIEE():
         }
         return res
     
-    def _test_zero_trend(self, relation, adata, edata, method='pearson', p_cutoff=0.05):
-        sorted_samples = adata.obs.sort_values(by=['time']).index.tolist()
+    def _test_zero_trend(self, relation, group_edata, edata, method='pearson', p_cutoff=0.05):
+        sorted_samples = group_edata.obs.sort_values(by=['time']).index.tolist()
         val = edata[sorted_samples, relation].layers[f'{method}_entropy'].reshape(-1)
         t_statistic, p_value = ttest_1samp(val, 0)
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_1samp.html
@@ -483,19 +519,18 @@ class SNIEE():
         return res 
 
     def test_TER(self, per_group, p_cutoff=0.05):
-        adata = self.adata
         edata = self.edata
 
         trend_list = []
         for i, method in enumerate(self.relation_methods):
             relations = set()
             for j, relation in enumerate(edata.uns[f'{method}_DER']):
-                per_adata = adata[adata.obs[self.groupby] == per_group, :]
-                up_res = self._test_up_trend(relation, per_adata, edata, method=method, p_cutoff=p_cutoff)
+                per_edata = edata[edata.obs[self.groupby] == per_group, :]
+                up_res = self._test_up_trend(relation, per_edata, edata, method=method, p_cutoff=p_cutoff)
                 is_per_up = up_res['trend'] == 'increasing'
 
-                ref_adata = adata[adata.obs[self.groupby] != per_group, :]
-                zero_res = self._test_zero_trend(relation, ref_adata, edata, method=method, p_cutoff=p_cutoff)
+                ref_edata = edata[edata.obs[self.groupby] != per_group, :]
+                zero_res = self._test_zero_trend(relation, ref_edata, edata, method=method, p_cutoff=p_cutoff)
                 is_ref_zero = zero_res['p_value'] < p_cutoff 
                 up_res.update(zero_res)
                 
@@ -523,7 +558,8 @@ class SNIEE():
         edata.uns[f'all_TER'] = list(all_TERs)
         return
 
-    def test_val_trend_entropy(self, relations, method='pearson', p_cutoff=0.05,
+    def test_val_trend_entropy(self, relations, method='pearson', 
+                               p_cutoff=0.05,
                                out_prefix='./test'):
         adata = self.adata
         edata = self.edata

@@ -31,12 +31,12 @@ def relation_score(sniee_obj, method='pearson', test_type='TER', groupby=None,
         sns.lineplot(df, x='time', y='score', hue=groupby, 
                      ax=ax)
                 
-    title += f'{sniee_obj.dataset} {method} entropy score of {len(relations)} {test_type}s '
+    title += f'{sniee_obj.dataset}\n{method} entropy score of {len(relations)} {test_type}s '
     if ax is not None:
         ax.set_title(title)
     elif out_prefix:
         plt.title(title)
-        plt.savefig(f'{out_prefix}_{title}_relation_score.png')
+        plt.savefig(f'{out_prefix}_{title}_relation_score.png'.replace('\n', ' '))
         plt.show()
     else:
         plt.title(title)
