@@ -82,28 +82,94 @@ def investigate_relation(sniee_obj, relation, groupby='group',
     plt.show()
 
 
-def pathway_dynamic(sniee_obj, per_group, method='pearson', test_type='TER',
-                    p_adjust=True, p_cutoff=0.05, n_top_pathway=30, 
-                    n_top_relations=500):
-    df = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}_enrich_df'] 
+def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
+                    p_adjust=True, p_cutoff=0.05, n_top_pathway=10, n_top_relations=500,
+                    # Available options for piority_term: None, list of terms(specific pathway names)
+                    piority_term=None,
+                    # Available options for eval_para: 'top_n_ratio', 'overlap_ratio, 'P-value', 'Adjusted P-value', 'Odds Ratio', 'Combined Score', '-logP'
+                    eval_para='top_n_ratio'):
+    df = sniee_obj.edata.uns[f"{method}_{sniee_obj.groupby}_{per_group}_{test_type}_enrich_df"]
 
     if p_adjust:
-        df = df[df['Adjusted P-value'] < p_cutoff]
+        df = df[df["Adjusted P-value"] < p_cutoff]
     else:
-        df = df[df['P-value'] < p_cutoff]
-    df = df[df['top_n'] <= n_top_relations]
-
-    for gene_set in set(df['Gene_set'].unique()):
-        tmp = df[df['Gene_set'] == gene_set]
-        tmp = pd.pivot(tmp[['top_n', 'Term', 'top_n_ratio']].drop_duplicates(), index='Term', columns='top_n', values='top_n_ratio')
-        idx = tmp.sum(axis=1).sort_values(ascending=False).index
-        tmp = tmp.T[idx].T.head(n_top_pathway)
+        df = df[df["P-value"] < p_cutoff]
+    df = df[df["top_n"] <= n_top_relations]
+    
+    df["overlap_ratio"] = df["Overlap"].apply(
+    lambda x: float(x.split("/")[0]) / float(x.split("/")[1])
+    )
+    
+    if eval_para in ['Adjusted P-value', 'P-value']:
+        ascending=True
+        if piority_term is None:
+            df["selected"] = 0
+        else:
+            df["selected"] = df["Term"].apply(
+                lambda x: x
+                not in piority_term
+            )
+    elif eval_para in ['Odds Ratio', 'top_n_ratio', 'overlap_ratio', 'Combined Score']:
+        ascending=False
+        if piority_term is None:
+            df["selected"] = 1
+        else:
+            df["selected"] = df["Term"].apply(
+                lambda x: x
+                in piority_term
+            )
+    elif eval_para == '-logP':
+        ascending=False
+        if p_adjust == True:
+            df['-logP'] = -np.log10(df['Adjusted P-value'])
+        else:
+            df['-logP'] = -np.log10(df['P-value'])
+            
+        if piority_term is None:
+            df["selected"] = 1
+        else:
+            df["selected"] = df["Term"].apply(
+                lambda x: x
+                in piority_term
+            )
+    else:
+        print_msg(f"Evaluation parameter {eval_para} is not supported.")
+        return None
+    
+    for gene_set in set(df["Gene_set"].unique()):
+        tmp = df[df["Gene_set"] == gene_set]
+        tmp = pd.pivot(
+            tmp[["top_n", "Term", eval_para, "selected"]].drop_duplicates(),
+            index=["Term", "selected"],
+            columns=["top_n"],
+            values=[eval_para]
+        )[eval_para]
+        
+        tmp_weight = tmp * np.array(np.sum(tmp.columns)/tmp.columns)
+        
+        # weights
+        if ascending == True:
+            tmp_weight = pd.DataFrame(tmp_weight.sum(axis=1) / (len(tmp.columns) - tmp.isna().sum(axis=1)),columns=['sum'])
+        else:
+            tmp_weight = pd.DataFrame(tmp_weight.sum(axis=1) * (len(tmp.columns) - tmp.isna().sum(axis=1)),columns=['sum'])
+    
+        tmp_weight = tmp_weight.sort_values(by=['sum'], ascending=ascending)
+        tmp_weight['rank'] = np.arange(1,len(tmp_weight)+1)
+        tmp['rank'] = tmp_weight['rank']
+        tmp_weight = tmp_weight.sort_values(by=['selected','sum'], ascending=ascending)
+        idx = tmp_weight.index.get_level_values(0)
+        tmp = tmp.T[idx].T.head(n_top_pathway).reset_index().set_index('Term').drop(columns='selected')
+        tmp['rank'] = tmp['rank'].astype(int)
+        tmp.index = tmp.apply(lambda row: f"{row.name} (Rank {int(row['rank'])})", axis=1)
+        tmp.drop(columns='rank', inplace=True)
+        
         sns.heatmap(tmp, yticklabels=1)
-        plt.title(f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}s\n' + gene_set)
-        fn = f'{sniee_obj.out_dir}/{method}_{sniee_obj.groupby}_{per_group}_{test_type}_{gene_set}_enrich_top_n.png'
+        plt.title(f"{method}_{sniee_obj.groupby}_{per_group}_{test_type}s\n" + f"{gene_set} with {eval_para}")
+        fn = f"{sniee_obj.out_dir}/{method}_{sniee_obj.groupby}_{per_group}_{test_type}_{gene_set}_{eval_para}_enrich_top_n.png"
         plt.savefig(fn)
-        print_msg(f'[Output] The {method} {sniee_obj.groupby} {per_group} {test_type} {gene_set} top_n enrichment is saved to:\n{fn}')
+        print_msg(f"[Output] The {method} {sniee_obj.groupby} {per_group} {test_type} {gene_set} {eval_para} top_n enrichment is saved to:\n{fn}")
         plt.show()
+
         
 def draw_gene_network(sniee_obj, per_group,
                       method='pearson', test_type='TER',
