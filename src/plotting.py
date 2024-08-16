@@ -1,6 +1,7 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from pyvis.network import Network
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
