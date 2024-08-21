@@ -88,7 +88,8 @@ def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
                     # Available options for piority_term: None, list of terms(specific pathway names)
                     piority_term=None,
                     # Available options for eval_para: 'top_n_ratio', 'overlap_ratio, 'P-value', 'Adjusted P-value', 'Odds Ratio', 'Combined Score', '-logP'
-                    eval_para='top_n_ratio'):
+                    eval_para='top_n_ratio',
+                    dataset_name=None,):
     df = sniee_obj.edata.uns[f"{method}_{sniee_obj.groupby}_{per_group}_{test_type}_enrich_df"]
 
     if p_adjust:
@@ -165,9 +166,9 @@ def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
         tmp.drop(columns='rank', inplace=True)
         
         sns.heatmap(tmp, yticklabels=1)
-        plt.title(f"{method}_{sniee_obj.groupby}_{per_group}_{test_type}s\n" + f"{gene_set} with {eval_para}")
+        plt.title(f"{dataset_name}_{method}_{sniee_obj.groupby}_{per_group}_{test_type}s\n" + f"{gene_set} with {eval_para}")
         fn = f"{sniee_obj.out_dir}/{method}_{sniee_obj.groupby}_{per_group}_{test_type}_{gene_set}_{eval_para}_enrich_top_n.png"
-        plt.savefig(fn)
+        plt.savefig(fn,dpi=300,format='png',bbox_inches='tight')
         print_msg(f"[Output] The {method} {sniee_obj.groupby} {per_group} {test_type} {gene_set} {eval_para} top_n enrichment is saved to:\n{fn}")
         plt.show()
 
