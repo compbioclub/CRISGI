@@ -608,7 +608,7 @@ class SNIEETime(SNIEE):
 
         trend_list = []
         for i, method in enumerate(self.relation_methods):
-            relations = set()
+            relations = []
             for j, relation in enumerate(edata.uns[f'{method}_{self.groupby}_{per_group}_DER']):
                 per_edata = edata[edata.obs[self.groupby] == per_group, :]
                 trend_res = self._test_trend(relation, per_edata, method=method, p_cutoff=p_cutoff)
@@ -622,11 +622,12 @@ class SNIEETime(SNIEE):
                 is_TER = is_per_trend and is_ref_zero    
                 trend_res['TER'] = is_TER
                 if is_TER:
-                    relations.add(relation)
+                    relations.append(relation)
                 trend_list.append(trend_res)
 
             print(method, 'diff', j+1, 'trend', len(relations))
             edata.uns[f'{method}_{self.groupby}_{per_group}_TER'] = list(relations)
+            # common_TERs and all_TERs do not have order like '{method}_{self.groupby}_{per_group}_TER' above
             if i == 0:
                 common_TERs = set(relations)
                 all_TERs = set(relations)
@@ -853,7 +854,7 @@ class SNIEEGroup(SNIEE):
             groups = self.groups
         for per_group in groups:
             relations = edata.uns[f'{method}_{self.groupby}_{per_group}_DER']
-            filtered_relations = set()
+            filtered_relations = []
             for j, relation in enumerate(relations):
 
                 ref_edata = edata[edata.obs[self.groupby] != per_group, :]
@@ -863,7 +864,7 @@ class SNIEEGroup(SNIEE):
                 is_TER =  is_ref_zero    
                 zero_res['TER'] = is_TER
                 if is_TER:
-                    filtered_relations.add(relation)
+                    filtered_relations.append(relation)
                 trend_list.append(zero_res)
 
             print(per_group, method, 'diff', len(relations), 'trend', len(filtered_relations))
