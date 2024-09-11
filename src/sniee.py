@@ -281,19 +281,13 @@ class SNIEE():
         if n_top_relations is None:
             n_top_relations = len(relation_list)
 
-        args_list = [(top_n, relation_list, gene_sets, organism, background) for top_n in range(10, n_top_relations + 1, n_space)]
-
-        with ProcessPoolExecutor(max_workers=self.n_threads) as executor:
-            futures = {executor.submit(self._enrich_for_top_n, *args): args[0] for args in args_list}
-
-            for future in as_completed(futures):
-                top_n = futures[future]
-                try:
-                    top_n, enr, df = future.result()
-                    enr_dict[top_n] = enr
-                    df_list.append(df)
-                except Exception as exc:
-                    print(f'Top_n {top_n} generated an exception: {exc}')
+        for top_n in range(10, n_top_relations + 1, n_space):
+            try:
+                top_n, enr, df = self._enrich_for_top_n(top_n, relation_list, gene_sets, organism, background)
+                enr_dict[top_n] = enr
+                df_list.append(df)
+            except Exception as exc:
+                print(f'Top_n {top_n} generated an exception: {exc}')
 
         df = pd.concat(df_list)
         fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_{test_type}_enrich.csv'
