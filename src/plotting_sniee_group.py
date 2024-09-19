@@ -5,7 +5,7 @@ import pandas as pd
 import src.plotting as pl
 from src.util import print_msg
 
-def relation_score_line(sniee_obj, method='prod', test_type='DER',
+def relation_score_line(sniee_obj, ref_group, method='prod', test_type='DER',
                    relations=None, cmap='Spectral',
                    title='', out_prefix='test'):
     edata = sniee_obj.edata
@@ -22,8 +22,8 @@ def relation_score_line(sniee_obj, method='prod', test_type='DER',
             continue
 
         df = edata.obs.copy()
-        df['avg(score)'] = edata[:, per_relations].layers[f'{method}_entropy'].mean(axis=1)
-        df['per_group'] = f'{per_group} ({len(per_relations)} {test_type}s)'
+        df['avg(score)'] = edata[:, per_relations].layers[f'{ref_group}_{method}_entropy'].mean(axis=1)
+        df['per_group'] = f'{ref_group}->{per_group} ({len(per_relations)} {test_type}s)'
         df_list.append(df)      
 
         sub_title = title + f'{sniee_obj.dataset}\n{method} entropy score of {per_group} {len(per_relations)} {test_type}s'
@@ -46,7 +46,7 @@ def relation_score_line(sniee_obj, method='prod', test_type='DER',
     if out_prefix:
         plt.savefig(f'{out_prefix}_{title}_relation_score_lineplot.png'.replace('\n', ' '))
 
-def relation_score_box(sniee_obj, method='prod', test_type='DER',
+def relation_score_box(sniee_obj, ref_group, method='prod', test_type='DER',
                    relations=None,  cmap='Spectral',
                    title='', out_prefix='test'):
     edata = sniee_obj.edata
@@ -63,19 +63,17 @@ def relation_score_box(sniee_obj, method='prod', test_type='DER',
             continue
         
         df = pd.DataFrame()
-        df[sniee_obj.groupby] = edata.obs_names.tolist()*len(per_relations)
-        df['avg(score)'] = edata[:, per_relations].layers[f'{method}_entropy'].toarray().T.reshape(-1)
-        df['per_group'] = f'{per_group} ({len(per_relations)} {test_type}s)'
-
-        sub_title = title + f'{sniee_obj.dataset}\n{method} entropy score of {per_group} {len(per_relations)} {test_type}s'
-        ax = sns.boxenplot(df, x=sniee_obj.groupby, y='avg(score)',
-                           hue=sniee_obj.groupby, cmap=cmap)
+        df[sniee_obj.groupby] = edata.obs[sniee_obj.groupby].tolist()*len(per_relations)
+        df['avg(score)'] = edata[:, per_relations].layers[f'{ref_group}_{method}_entropy'].toarray().T.reshape(-1)
+        sub_title = title + f'{sniee_obj.dataset}\n{ref_group} {method} entropy score of {per_group} {len(per_relations)} {test_type}s'
+        ax = sns.boxenplot(df, x=sniee_obj.groupby, y='avg(score)', hue=sniee_obj.groupby,
+                           cmap=cmap)
         plt.title(sub_title)
         plt.show()
         if out_prefix:
             plt.savefig(f'{out_prefix}_{title}_relation_score_boxplot.png'.replace('\n', ' '))
 
-def get_relation_score(sniee_obj, relations=None, groups=None,
+def get_relation_score(sniee_obj, ref_group, relations=None, groups=None,
                         method='prod', test_type='DER',
                         out_dir=None):
     edata = sniee_obj.edata
@@ -93,16 +91,21 @@ def get_relation_score(sniee_obj, relations=None, groups=None,
             print(per_group)
             continue
 
-        X = edata[:, per_relations].layers[f'{method}_entropy'].T
-        sns.heatmap(pd.DataFrame(
-            X, columns=edata.obs_names,
-            index=per_relations
-                                 ))
+        from sklearn.preprocessing import normalize
+
+        for group in groups:
+            samples = edata.obs[edata.obs[sniee_obj.groupby] == group].index
+            X = edata[samples, per_relations].layers[f'{ref_group}_{method}_entropy'].T.toarray()
+            #X = normalize(X, axis=1)
+            sns.heatmap(pd.DataFrame(
+                X, columns=samples+group,
+                index=per_relations
+                ))
         #print_msg(f'[Output] The subject {subject} {method} {test_type}{len(relations)} entropy scores are saved to:\n{fn}')
 
         #sns.heatmap(df, cmap='RdYlBu_r', robust=True)
-        plt.title(f'delta entropy score for {sniee_obj.groupby} {per_group} {len(per_relations)} {test_type}s')
-        plt.show()
+            plt.title(f'delta entropy score for {sniee_obj.groupby} {per_group} {len(per_relations)} {test_type}s')
+            plt.show()
 
 def draw_gene_network(*args, **kwargs):
     pl.draw_gene_network(*args, **kwargs)

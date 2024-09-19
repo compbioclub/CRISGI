@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 import pickle
+from sksurv.nonparametric import kaplan_meier_estimator
+from sksurv.compare import compare_survival
 from itertools import chain, permutations
 import gseapy as gp
 import pymannkendall as mk
@@ -70,11 +72,34 @@ class SNIEE():
                 else:
                     genes = np.sort(genes)
                 self.adata = self.adata[:, genes]
+                self.adata.var['i'] = range(self.adata.shape[1])
                 bg_net, _ = self.load_bg_net_from_genes(genes)
         else:
             bg_net = csr_matrix(np.triu(self.adata.varm['bg_net']))
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
+
+    def init_edata(self, per_obss, headers):
+        adata = self.adata
+        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
+        adata = self.adata
+        bg_net = adata.varm['bg_net']
+        row, col = bg_net.nonzero()
+        per_n = len(per_obss_is)
+        relation_n = bg_net.count_nonzero()
+        edata = ad.AnnData(np.zeros((per_n, relation_n)))
+        per_obs = list(chain.from_iterable(per_obss))
+        df = adata[per_obs, :].obs[headers].copy().drop_duplicates()
+        df.index = df['test']
+        edata.obs = df
+        edata.var_names = adata.var_names[row].astype(str) + '_' + adata.var_names[col].astype(str)
+        edata.var['gene1'] = adata.var_names[row]
+        edata.var['gene2'] = adata.var_names[col]
+        edata.var['gene1_i'] = row
+        edata.var['gene2_i'] = col
+        edata.var['i'] = range(relation_n)
+        self.edata = edata
+        print_msg(f'Init edata with obs {edata.shape[0]} and relation {edata.shape[1]}')
 
     def save(self):
         pk_fn = f'{self.out_dir}/{self.dataset}_sniee_obj.pk'
@@ -84,7 +109,7 @@ class SNIEE():
     def load_bg_net_from_relations(self, relations):
         print_msg('load bg_net by looping relations.')
         genes = np.array([r.split('_') for r in relations]).reshape(-1)
-        genes = [g for g in genes if g in self.adata.var_names]
+        genes = list(set([g for g in genes if g in self.adata.var_names]))
         if not genes:
             raise ValueError('The genes in given relations do not exists in adata!')
         
@@ -233,24 +258,53 @@ class SNIEE():
         print_msg(f'{method} size {R.shape} min { R.min()} max {R.max()}')
         return R
     
-    def _test_trend(self, relation, edata, method='pearson', p_cutoff=0.05):
+    def test_DER(self, groupby, groups, test_method="wilcoxon"):
+        self.groupby = groupby
+        edata = self.edata
+
+
+        df_list = []
+        for method in self.relation_methods:
+            mean_df = pd.DataFrame(index=edata.var_names)
+            for ref_group in groups:
+                group_X = edata[edata.obs[groupby] == ref_group].layers[f'{ref_group}_{method}_entropy']
+                mean_df[ref_group] = np.nansum(group_X, axis=0)
+            print(mean_df.head(5))
+
+            for per_group, ref_group in permutations(groups, 2):
+                print(ref_group)
+                sc.tl.rank_genes_groups(edata, layer=f'{ref_group}_{method}_entropy',
+                                        groupby=groupby, reference=ref_group,
+                                        method=test_method)
+                df = sc.get.rank_genes_groups_df(edata, group=per_group)
+                df['ref_group'] = ref_group
+                df['per_group'] = per_group
+                df['method'] = method
+                df['ref_group_mean'] = df['names'].apply(lambda x: mean_df[ref_group].to_dict()[x])
+                df['per_group_mean'] = df['names'].apply(lambda x: mean_df[per_group].to_dict()[x])
+                df_list.append(df)
+        df = pd.concat(df_list)
+        print(df)
+        return  
+
+    def _test_trend(self, relation, edata, layer, p_cutoff=0.05):
         sorted_samples = edata.obs.sort_values(by=['time']).index.tolist()
-        val = edata[sorted_samples, relation].layers[f'{method}_entropy'].reshape(-1)
+        val = edata[sorted_samples, relation].layers[layer].reshape(-1)
         res = mk.original_test(val, alpha=p_cutoff)
         # https://pypi.org/project/pymannkendall/
         res = {
-            'relation': relation, 'method': method,
+            'relation': relation, 'layer': layer,
             'trend': res.trend, 'h': res.h, 'p': res.p, 'z': res.z,
             'Tau': res.Tau, 's': res.s, 'var_s': res.var_s, 'slope': res.slope, 'intercept': res.intercept
         }
         return res
     
-    def _test_zero_trend(self, relation, edata, method='pearson'):
+    def _test_zero_trend(self, relation, edata, layer):
         #sorted_samples = edata.obs.sort_values(by=['time']).index.tolist()
-        val = edata[:, relation].layers[f'{method}_entropy'].reshape(-1)
+        val = edata[:, relation].layers[layer].reshape(-1)
         t_statistic, p_value = ttest_1samp(val, 0)
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_1samp.html
-        res = {'relation': relation, 'method': method,
+        res = {'relation': relation, 'layer': layer,
                't_statistic': t_statistic, 'p_value': p_value}
         return res 
     
@@ -322,37 +376,88 @@ class SNIEE():
             sc.pl.umap(self.adata, color=['per_seat_cluster', *plot_label])
 
 
+    def _assign_score_group(self, df, x, by='mean'):
+        if by == 'median':
+            cutoff = df['score'].quantile(0.5)
+        else:
+            cutoff = df['score'].mean()
+        if x <= cutoff:
+            return f'<= {by}'
+        return f'> {by}'
+
+    def survival_analysis(self, ref_group,
+                        per_group,
+                        relations=None,
+                        groupbys=[],
+                        survival_types = ['os', 'pfs'],
+                        time_unit = 'time',
+                        test_type='DER', method='prod',
+                        title=''):
+
+        edata = self.edata
+        if relations is None:
+            relations = edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}']
+        else:
+            relations = [x for x in relations if x in edata.var_names]
+        if len(relations) == 0:
+            return
+        edata.obs['score'] = np.nansum(edata[:, relations].layers[f'{ref_group}_{method}_entropy'], axis=1)  # check OV nan value
+        edata.obs['score_group'] = edata.obs['score'].apply(lambda x: self._assign_score_group(edata.obs, x))
+        df = edata.obs.copy()
+        for survival in survival_types:
+            if survival not in df.columns:
+                continue
+            df = df[~df[f'{survival}_status'].isna()]
+            df = df[~df[survival].isna()]
+            df[f"{survival}_status"] = df[f"{survival}_status"].astype(bool)
+            if df[[f"{survival}_status", 'score_group']].value_counts().shape[0] < 2:
+                continue
+
+            for groupby in ['score_group'] + groupbys:
+                for score_group in df[groupby].unique():
+                    mask_group = df[groupby] == score_group
+                    time_treatment, survival_prob_treatment, conf_int = kaplan_meier_estimator(
+                        df[f"{survival}_status"][mask_group],
+                        df[survival][mask_group],
+                        conf_type="log-log",
+                    )
+                    if groupby == 'score_group':
+                        if score_group.startswith('<'):
+                            color = 'steelblue'
+                        else:
+                            color = 'red'
+                    else:
+                        color = None
+                    plt.step(time_treatment, survival_prob_treatment, where="post", label=score_group, color=color)
+                    plt.fill_between(time_treatment, conf_int[0], conf_int[1], alpha=0.25, step="post", color=color)
+
+                dt = np.dtype([(f"{survival}_status", bool), (survival, float)])
+                y = [(df.iloc[i][f"{survival}_status"], df.iloc[i][survival]) for i in range(df.shape[0])]
+                y = np.array(y, dtype=dt)
+                chi2, p_value = compare_survival(y, df[groupby])
+
+                plt.ylim(0, 1)
+                plt.ylabel(r"est. probability of survival $\hat{S}(t)$")
+                plt.xlabel(f"{survival.upper()} {time_unit} $t$")
+                plt.legend(loc="best")
+                plt.title(f'{title} {method}_{self.groupby}_{per_group}_{len(relations)}{test_type}s\nlog-rank test\nchi2: {round(chi2, 2)}, p-value: {p_value}')
+                plt.show()
+                fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_{len(relations)}{test_type}s_{survival.upper()}_surv.png'
+                print_msg(f'[Output] The survival plot are saved to:\n{fn}')
+
+
 class SNIEETime(SNIEE):
 
     def __init__(self, adata, **kwargs):
         super().__init__(adata, **kwargs)
 
-    def init_edata(self, per_obss):
-        adata = self.adata
-        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
-        adata = self.adata
-        bg_net = adata.varm['bg_net']
-        row, col = bg_net.nonzero()
-        per_n = len(per_obss_is)
-        relation_n = bg_net.count_nonzero()
-        edata = ad.AnnData(np.zeros((per_n, relation_n)))
-        per_obs = list(chain.from_iterable(per_obss))
-        df = adata[per_obs, :].obs[['test', 'subject', 'time', 'symptom']].copy().drop_duplicates()
-        df.index = df['test']
-        edata.obs = df
-        edata.var_names = adata.var_names[row].astype(str) + '_' + adata.var_names[col].astype(str)
-        edata.var['gene1'] = adata.var_names[row]
-        edata.var['gene2'] = adata.var_names[col]
-        edata.var['gene1_i'] = row
-        edata.var['gene2_i'] = col
-        self.edata = edata
-        print_msg(f'Init edata with obs {edata.shape[0]} and relation {edata.shape[1]}')
+
 
     def calculate_entropy(self, ref_obs, per_obss, layer='log1p'):
         print('reference observations', len(ref_obs))
         print('perputation groups', len(per_obss))
 
-        self.init_edata(per_obss)
+        self.init_edata(per_obss, headers=['test', 'subject', 'time', 'symptom'])
 
         if 'prod' in self.relation_methods:
             self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
@@ -527,26 +632,8 @@ class SNIEETime(SNIEE):
         print('per_like_group is', self.per_like_group)
 
 
-    def test_DER(self, groupby=None, plot=True, plot_label=[], 
-                          ref_groupby=None, ref_group=None,
-                          test_method="wilcoxon",
-                          out_prefix=None):
-        
-        if groupby is None:
-            self.find_ref_like_group(ref_groupby, ref_group, n_cluster=2, n_neighbors=10,
-                                     plot=plot, plot_label=plot_label, out_prefix=out_prefix)
-            groupby = 'seat_cluster'
-
-        self.groupby = groupby
-        #adata = self.adata
-        edata = self.edata
-        #edata.obs = adata[edata.obs_names].obs
-        #edata.obsm['X_umap'] = adata[edata.obs_names].obsm['X_umap']        
-        for method in self.relation_methods:
-            sc.tl.rank_genes_groups(edata, layer=f'{method}_entropy',
-                                    groupby=groupby, method=test_method)
-            edata.uns[f'{method}_rank_genes_groups'] = edata.uns['rank_genes_groups']
-        return
+    def test_DER(self, groupby, ref_group, test_method="wilcoxon"):
+        super().test_DER(groupby, [ref_group], test_method=test_method)
 
     def get_DER(self, per_group, n_top_relations=None, 
                 p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
@@ -683,29 +770,65 @@ class SNIEEGroup(SNIEE):
     def __init__(self, adata, **kwargs):
         super().__init__(adata, **kwargs)
 
-
-    def init_edata(self, groupby, groups):
+    def calculate_ref_entropy(self, groupby, groups, layer='log1p', obs_cutoff=100):
         adata = self.adata
-
+        X = get_array(adata, layer=layer)
+        N, M = X.shape
         bg_net = adata.varm['bg_net']
         row, col = bg_net.nonzero()
-        per_n = len(groups)
-        relation_n = bg_net.count_nonzero()
 
-        edata = ad.AnnData(np.zeros((per_n, relation_n)))
-        edata.obs_names = groups
-        edata.obs[groupby] = groups
-        edata.obs[groupby] = edata.obs[groupby].astype('category')
-        edata.var_names = adata.var_names[row].astype(str) + '_' + adata.var_names[col].astype(str)
-        edata.var['gene1'] = adata.var_names[row]
-        edata.var['gene2'] = adata.var_names[col]
-        edata.var['gene1_i'] = row
-        edata.var['gene2_i'] = col
-        self.edata = edata
-        print_msg(f'Init edata with obs {edata.shape[0]} and relation {edata.shape[1]}')
+        self.ref_R_sum_dict = {}
+        self.ref_obs_is_dict = {}
+        self.ref_entropy_dict = {}
+        self.ref_std_dict = {}
 
-    def calculate_entropy(self, groupby, layer='log1p', obs_cutoff=100):
+        for group in groups:
+            ref_obs_is = adata.obs[adata.obs[groupby] == group].i.tolist()
+            self.ref_obs_is_dict[group] = ref_obs_is
+            ref_R_sum = self._prod(X, ref_obs_is, row, col, obs_cutoff=obs_cutoff)
+            self.ref_R_sum_dict[group] = ref_R_sum
+
+            ref_R_sparse = csr_matrix((ref_R_sum[row, col]/len(ref_obs_is), (row, col)), shape = (M, M))
+            self.ref_entropy_dict[group] = self.sparseR2entropy(ref_R_sparse, row, col)
+
+            gene_std = X[ref_obs_is].std(axis=0)
+            self.ref_std_dict[group] = (gene_std[row]+gene_std[col])/2
+
+    def load_ref_entropy(self, train_sniee_obj):
+        ref_edata = train_sniee_obj.edata
+        edata = self.edata
+        relations = sorted(list(set(ref_edata.var_names) & set(edata.var_names)))
+        ref_edata = ref_edata[:, relations]
+        edata = edata[:, relations]
+        _, M = self.adata.shape
+
+        ref_row, ref_col = ref_edata.var.gene1_i, ref_edata.var.gene2_i
+        row, col = edata.var.gene1_i, edata.var.gene2_i
+        self.ref_R_sum_dict = {}
+        self.ref_entropy_dict = {}
+        self.ref_std_dict = {}
+        for group in train_sniee_obj.groups:
+            ref_R_sum = train_sniee_obj.ref_R_sum_dict[group]
+            val = ref_R_sum[ref_row, ref_col]
+            ref_R_sum = csr_matrix((val, (row, col)), shape = (M, M)).toarray()
+            self.ref_R_sum_dict[group] = ref_R_sum
+
+            ref_entropy = train_sniee_obj.ref_entropy_dict[group]
+            ref_entropy = ref_entropy[ref_edata.var.i]
+            self.ref_entropy_dict[group] = ref_entropy
+
+            ref_std = train_sniee_obj.ref_std_dict[group]
+            ref_std = ref_std[ref_edata.var.i]
+            self.ref_std_dict[group] = ref_std
+        self.ref_obs_is_dict = train_sniee_obj.ref_obs_is_dict
+
+    def calculate_entropy(self, groupby, per_obss, layer='log1p', obs_cutoff=100,
+                          train_sniee_obj=None, 
+                          headers=[]):
         adata = self.adata
+        X = get_array(adata, layer=layer)
+        _, M = X.shape
+
         if groupby not in adata.obs:
             raise KeyError(f'{groupby} not in adata.obs.')
         
@@ -713,85 +836,40 @@ class SNIEEGroup(SNIEE):
         self.groups = groups
         print('cluster groups', len(groups))
 
-        self.init_edata(groupby, groups)
+        self.init_edata(per_obss, headers=['test', 'subject', groupby] + headers)
         edata = self.edata
 
-        X = get_array(adata, layer=layer)
-        N, M = X.shape
-        bg_net = adata.varm['bg_net']
-        row, col = bg_net.nonzero()
+        if train_sniee_obj is None:
+            self.calculate_ref_entropy(groupby, groups, layer=layer, obs_cutoff=obs_cutoff)
+        else:
+            self.load_ref_entropy(train_sniee_obj)
 
+        row, col = edata.var.gene1_i, edata.var.gene2_i
 
-        ref_R_sum_dict = {}
-        per_R_sum = np.zeros((M, M))
-        group_obs_is_dict = {}
-        for group in groups:
-            group_obs_is = adata.obs[adata.obs[groupby] == group].i.tolist()
-            group_obs_is_dict[group] = group_obs_is
-            group_R_sum = self._prod(X, group_obs_is, row, col, obs_cutoff=obs_cutoff)
-            per_R_sum += group_R_sum
+        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
+        for ref_group in groups:
+            for per_i, per_obs_is in enumerate(per_obss_is):
+                ref_obs_is = self.ref_obs_is_dict[ref_group] 
 
-            for ref_group in groups:
-                if group == ref_group:
-                    continue
-                if ref_group in ref_R_sum_dict:
-                    ref_R_sum_dict[ref_group] += group_R_sum
+                per_R_sum = self._prod(X, per_obs_is, row, col, obs_cutoff=obs_cutoff) + self.ref_R_sum_dict[ref_group]
+                per_R_sparse = csr_matrix((per_R_sum[row, col]/(len(ref_obs_is) + len(per_obs_is)), (row, col)), shape = (M, M))
+                per_relation_entropy = self.sparseR2entropy(per_R_sparse, row, col)
+                delta_entropy = np.abs(per_relation_entropy - self.ref_entropy_dict[ref_group])
+
+                if train_sniee_obj is None:
+                    gene_std = X[ref_obs_is + per_obs_is].std(axis=0)
                 else:
-                    ref_R_sum_dict[ref_group] = group_R_sum
+                    ref_X = get_array(train_sniee_obj.adata, layer=layer)
+                    ref_X = ref_X[ref_obs_is, :][:, train_sniee_obj.adata[:, self.adata.var_names].var.i]
+                    per_X = np.concatenate((ref_X, X), axis=0)
+                    gene_std = per_X.std(axis=0)
+                per_relation_std = (gene_std[row]+gene_std[col])/2
+                delta_std = np.abs(per_relation_std - self.ref_std_dict[ref_group])
+                edata.X[per_i, :] = delta_entropy * delta_std
+            edata.layers[f'{ref_group}_prod_entropy'] = edata.X
 
-        per_R_sparse = csr_matrix((per_R_sum[row, col]/(N), (row, col)), shape = (M, M))
-        per_relation_entropy = self.sparseR2entropy(per_R_sparse, row, col)
-        gene_std = X.std(axis=0)
-        per_relation_std = (gene_std[row]+gene_std[col])/2
-        
-        for i, group in enumerate(groups):
-            ref_R_sum = ref_R_sum_dict[group]
-            ref_obs_is = adata.obs[adata.obs[groupby] != group].i.tolist()
-            ref_R_sparse = csr_matrix((ref_R_sum[row, col]/len(ref_obs_is), (row, col)), shape = (M, M))
-            ref_relation_entropy = self.sparseR2entropy(ref_R_sparse, row, col)
-            delta_entropy = np.abs(per_relation_entropy - ref_relation_entropy)
-
-            gene_std = X[ref_obs_is].std(axis=0)
-            ref_relation_std = (gene_std[row]+gene_std[col])/2
-            delta_std = np.abs(per_relation_std - ref_relation_std)
-            edata.X[i, :] = delta_entropy * delta_std
-
-        edata.layers['prod_entropy'] = edata.X
-
-
-    def _test_DER(self, groupby, n_rep=10, test_method="wilcoxon"):
-        
-        self.groupby = groupby
-        edata = self.edata
-        rep_edata = ad.concat([edata]*n_rep)
-
-        for method in self.relation_methods:
-            sc.tl.rank_genes_groups(rep_edata, layer=f'{method}_entropy',
-                                    groupby=groupby, method=test_method)
-            edata.uns[f'{method}_rank_genes_groups'] = rep_edata.uns['rank_genes_groups']
-        return
-    
-    def _get_DER(self, **kwargs):
-        for per_group in self.groups:
-            super(SNIEEGroup, self).get_DER(per_group=per_group, **kwargs)
-        return 
-
-
-    def test_DER(self, groupby, n_rep=10, test_method="wilcoxon"):
-        
-        self.groupby = groupby
-        edata = self.edata
-        rep_edata = ad.concat([edata]*n_rep)
-
-        for method in self.relation_methods:
-            for ref_group in self.groups:
-                sc.tl.rank_genes_groups(rep_edata, layer=f'{method}_entropy',
-                                        groupby=groupby, 
-                                        reference=ref_group,
-                                        method=test_method)
-                edata.uns[f'{method}_rank_genes_groups_{ref_group}'] = rep_edata.uns['rank_genes_groups']
-        return    
-
+    def test_DER(self, groupby, test_method="wilcoxon"):
+        super().test_DER(groupby, self.groups, test_method=test_method)  
 
     def get_DER(self, n_top_relations=None, method='prod',
                 p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
@@ -799,13 +877,14 @@ class SNIEEGroup(SNIEE):
         edata = self.edata
         df_list = []
 
-
         for per_group, ref_group in permutations(self.groups, 2):
             df = sc.get.rank_genes_groups_df(edata, group=per_group, 
                                              key=f'{method}_rank_genes_groups_{ref_group}')
             df['method'] = method
             df['per_group'] = per_group
             df['ref_group'] = ref_group
+
+            print(df)
 
             if p_adjust:
                 p_method = 'pvals_adj'
@@ -816,6 +895,7 @@ class SNIEEGroup(SNIEE):
             df_list.append(df)
         
         df = pd.concat(df_list)
+        #print(df[df['_DER']])
         edata.uns[f'{self.groupby}_DER_df'] = df
         fn = f'{self.out_dir}/{self.groupby}_DER.csv'
         df.to_csv(fn, index=False)
@@ -857,7 +937,7 @@ class SNIEEGroup(SNIEE):
             for j, relation in enumerate(relations):
 
                 ref_edata = edata[edata.obs[self.groupby] != per_group, :]
-                zero_res = self._test_zero_trend(relation, ref_edata, method=method)
+                zero_res = self._test_zero_trend(relation, ref_edata, f'{ref_group}_{method}_entropy')
                 is_ref_zero = zero_res['p_value'] < p_cutoff 
                 
                 is_TER =  is_ref_zero    
@@ -881,3 +961,9 @@ class SNIEEGroup(SNIEE):
             groups = self.groups
         for per_group in groups:
             super(SNIEEGroup, self).pathway_enrich(per_group=per_group, **kwargs)
+
+    def survival_analysis(self, ref_group, groups=None, **kwargs):
+        if groups is None:
+            groups = self.groups
+        for per_group in groups:
+            super().survival_analysis(ref_group, per_group=per_group, **kwargs)
