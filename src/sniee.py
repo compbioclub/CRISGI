@@ -33,13 +33,15 @@ def load_sniee(pk_fn):
 
 class SNIEE():
 
+    # SNIEE
     def __init__(self, adata, bg_net=None, bg_net_score_cutoff=850,
                  genes=None,
-                 n_hvg=5000,
+                 n_hvg=5000, n_pcs=30,
                  relations=None,
                  n_threads=5,
                  relation_methods=['pearson', 'spearman', 'pos_coexp', 'neg_coexp'],
                  organism='human',
+                 class_type='time',
                  dataset='test',
                  out_dir='./out'
                  ):
@@ -49,17 +51,21 @@ class SNIEE():
         adata.var['i'] = range(adata.shape[1])
         self.adata = adata
         self.relation_methods = relation_methods
-        self.bg_net_score_cutoff = bg_net_score_cutoff
         self.organism = organism
         self.n_threads = n_threads
         self.dataset = dataset
-
+        self.class_type = class_type
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
         self.out_dir = out_dir
 
         if n_hvg is not None:
-            self.preprocess_adata(n_hvg=n_hvg)
+            self.preprocess_adata(n_hvg=n_hvg, n_pcs=n_pcs)
+
+        self.load_bg_net(bg_net, bg_net_score_cutoff, relations, genes)
+
+    def load_bg_net(self, bg_net, bg_net_score_cutoff, relations, genes):
+        self.bg_net_score_cutoff = bg_net_score_cutoff
 
         if relations is not None:
             bg_net = self.load_bg_net_from_relations(relations)
@@ -79,6 +85,7 @@ class SNIEE():
         self.adata.varm['bg_net'] = bg_net
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
+    # SNIEE
     def init_edata(self, per_obss, headers):
         adata = self.adata
         per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
@@ -101,11 +108,13 @@ class SNIEE():
         self.edata = edata
         print_msg(f'Init edata with obs {edata.shape[0]} and relation {edata.shape[1]}')
 
+    # SNIEE
     def save(self):
         pk_fn = f'{self.out_dir}/{self.dataset}_sniee_obj.pk'
         pickle.dump(self, open(pk_fn, 'wb'))
         print_msg(f'[Output] SNIEE object has benn saved to:\n{pk_fn}')
 
+    # SNIEE
     def load_bg_net_from_relations(self, relations):
         print_msg('load bg_net by looping relations.')
         genes = np.array([r.split('_') for r in relations]).reshape(-1)
@@ -124,13 +133,15 @@ class SNIEE():
                 bg_net[gene2i[gene1], gene2i[gene2]] = 1
         return bg_net
 
+    # SNIEE
     def load_bg_net_from_genes(self, genes):
         if (genes != np.sort(genes)).any():
             raise ValueError('The genes should be sorted!')
 
         print('input gene', len(genes))
-        ref_gb_net = pickle.load(open(f"src/stringdb_{self.organism}_v12_gb_net.pk","rb"))
-        ref_genes = pickle.load(open(f"src/stringdb_{self.organism}_v12_genes.pk","rb"))
+        dir = os.path.abspath( os.path.dirname( __file__ ) )
+        ref_gb_net = pickle.load(open(f"{dir}/stringdb_{self.organism}_v12_gb_net.pk","rb"))
+        ref_genes = pickle.load(open(f"{dir}/stringdb_{self.organism}_v12_genes.pk","rb"))
         self.adata.uns['stringdb_genes'] = ref_genes
 
         if ref_gb_net.count_nonzero() > len(genes)*len(genes):
@@ -143,6 +154,7 @@ class SNIEE():
         print('output relations after bg_net', len(relations))
         return bg_net, relations
 
+    # SNIEE
     def _loop_gene(self, genes, ref_genes, ref_gb_net):
         print_msg('load bg_net by looping genes.')
         ref_genes2i = {g:i for i, g in enumerate(ref_genes)}
@@ -163,6 +175,7 @@ class SNIEE():
                     relations.append(f'{gene1}_{gene2}')
         return bg_net, relations
 
+    # SNIEE
     def _loop_bg_net(self, genes, ref_genes, ref_gb_net):
         print_msg('load bg_net by looping bg_net.')
         genes2i = {g:i for i, g in enumerate(genes)}
@@ -179,6 +192,7 @@ class SNIEE():
                 relations.append(f'{gene1}_{gene2}')
         return bg_net, relations
 
+    # SNIEE
     def preprocess_adata(self, n_hvg=5000, random_state=0, n_pcs=30, n_neighbors=10):
         adata = self.adata
         #sc.pp.scale(adata)
@@ -187,8 +201,7 @@ class SNIEE():
         sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
         sc.tl.umap(adata, random_state=random_state)
 
-
-
+    # SNIEE
     def _prod(self, X, obs_is, row, col, obs_cutoff=100):
         _, M = X.shape
         if len(obs_is) > obs_cutoff:
@@ -201,7 +214,7 @@ class SNIEE():
                     R[j, k] += X[i, j] * X[i, k]
         return R
 
-
+    # SNIEE
     def sparseR2entropy(self, R, row, col):
         R_sum = R.sum(axis=0)
         R_sum[R_sum == 0] = 1  # TBD, speed up
@@ -218,11 +231,12 @@ class SNIEE():
         relation_entropy = (gene_entropy[row]+gene_entropy[col])/2
         return relation_entropy
 
+    # SNIEE
     def _std(self, adata):
         X = get_array(adata, layer='log1p')
         set_adata_var(adata, 'std', X.std(axis=0))
 
-
+    # SNIEE
     def _scale(self, adata, axis=0):
         X = get_array(adata, layer='log1p')
         N = X.shape[axis]
@@ -236,12 +250,14 @@ class SNIEE():
         adata.var['mean'] = mean.reshape(-1)
         adata.var['std'] = std.reshape(-1)
 
+    # SNIEE
     def _pearsonr(self, adata):
         self._scale(adata)
         X = get_array(adata, layer='scale')
         R = np.dot(X.T, X)/X.shape[1]
         return R
 
+    # SNIEE
     def _relation_score(self, adata, method):
         X = get_array(adata, layer='log1p')
         self._std(adata)
@@ -258,35 +274,104 @@ class SNIEE():
         print_msg(f'{method} size {R.shape} min { R.min()} max {R.max()}')
         return R
 
-    def test_DER(self, groupby, groups, test_method="wilcoxon"):
+    # SNIEE
+    def test_DER(self, groupby, per_group=None, test_method="wilcoxon", method='prod'):
+        myper_group = per_group
+        groups = self.adata.obs[groupby].unique()
+        self.groups = groups
         self.groupby = groupby
         edata = self.edata
 
-
         df_list = []
-        for method in self.relation_methods:
-            mean_df = pd.DataFrame(index=edata.var_names)
-            for ref_group in groups:
-                group_X = edata[edata.obs[groupby] == ref_group].layers[f'{ref_group}_{method}_entropy']
-                mean_df[ref_group] = np.nansum(group_X, axis=0)
-            print(mean_df.head(5))
-
-            for per_group, ref_group in permutations(groups, 2):
-                print(ref_group)
-                sc.tl.rank_genes_groups(edata, layer=f'{ref_group}_{method}_entropy',
+        mean_df = pd.DataFrame(index=edata.var_names)
+        for ref_group in groups:
+            if self.class_type == 'time':
+                edata_layer_ref = self.ref_time
+            else:
+                edata_layer_ref = ref_group
+            group_X = edata[edata.obs[groupby] == ref_group].layers[f'{edata_layer_ref}_{method}_entropy']
+            mean_df[ref_group] = np.nansum(group_X, axis=0)
+        for ref_group in groups:
+            if self.class_type == 'time':
+                edata_layer_ref = self.ref_time
+            else:
+                edata_layer_ref = ref_group
+            sc.tl.rank_genes_groups(edata, layer=f'{edata_layer_ref}_{method}_entropy',
                                         groupby=groupby, reference=ref_group,
                                         method=test_method)
+            for per_group in groups:
+                if myper_group is not None and myper_group != per_group:
+                    continue
+                if ref_group == per_group:
+                    continue
+
                 df = sc.get.rank_genes_groups_df(edata, group=per_group)
                 df['ref_group'] = ref_group
                 df['per_group'] = per_group
                 df['method'] = method
                 df['ref_group_mean'] = df['names'].apply(lambda x: mean_df[ref_group].to_dict()[x])
                 df['per_group_mean'] = df['names'].apply(lambda x: mean_df[per_group].to_dict()[x])
+                edata.uns[f'{method}_rank_genes_groups_{ref_group}_{per_group}'] = edata.uns['rank_genes_groups']
                 df_list.append(df)
+
         df = pd.concat(df_list)
-        print(df)
+        edata.uns[f'rank_genes_groups_df'] = df
+        return df
+
+    #SNIEE
+    def get_DER(self, per_group=None, n_top_relations=None, method='prod', 
+                p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
+                ):
+        myper_group = per_group
+        edata = self.edata
+        df_list = []
+
+        for ref_group, per_group in permutations(self.groups, 2):
+            if myper_group is not None and myper_group != per_group:
+                continue
+            df = sc.get.rank_genes_groups_df(edata, group=per_group,
+                                             key=f'{method}_rank_genes_groups_{ref_group}_{per_group}')
+            df['per_group'] = per_group
+            df['ref_group'] = ref_group
+            df['method'] = method
+            if p_adjust:
+                p_method = 'pvals_adj'
+            else:
+                p_method = 'pvals'
+
+            df['DER'] = (df[p_method] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)
+            df_list.append(df)
+
+        df = pd.concat(df_list)
+        tmp = df[df['DER']][['names', 'per_group', 'method']]
+        count_df = tmp.value_counts()
+        count_df = count_df[count_df == (len(self.groups) - 1)]
+        count_df = count_df.reset_index()
+        for per_group in self.groups:
+            if myper_group is not None and myper_group != per_group:
+                continue
+            if per_group not in count_df['per_group'].unique():
+                relations = []
+                tmp_df = pd.DataFrame()
+            else:
+                tmp = count_df[(count_df['per_group'] == per_group) & (count_df['method'] == method)]
+                relations = tmp.names.tolist()
+                tmp_df = df[(df['per_group'] == per_group) & df['names'].isin(relations)]
+                if sortby in ['logfoldchanges', 'scores']:
+                    tmp_df = tmp_df.sort_values(by=['DER', sortby], ascending=False)
+                else:
+                    tmp_df = tmp_df.sort_values(by=['DER', sortby], ascending=[False, True])
+                relations = tmp_df.names.drop_duplicates().tolist()
+                if n_top_relations is not None:
+                    relations = relations[: n_top_relations]
+            edata.uns[f'{method}_{self.groupby}_{per_group}_DER'] = relations
+            edata.uns[f'{method}_{self.groupby}_{per_group}_DER_df'] = tmp_df
+            fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_DER.csv'
+            tmp_df.to_csv(fn, index=False)
+            print_msg(f'[Output] The differential expressed relation (DER) {len(relations)} statistics are saved to:\n{fn}')
         return
 
+    # SNIEE
     def _test_trend(self, relation, edata, layer, p_cutoff=0.05):
         sorted_samples = edata.obs.sort_values(by=['time']).index.tolist()
         val = edata[sorted_samples, relation].layers[layer].reshape(-1)
@@ -299,6 +384,7 @@ class SNIEE():
         }
         return res
 
+    # SNIEE
     def _test_zero_trend(self, relation, edata, layer):
         #sorted_samples = edata.obs.sort_values(by=['time']).index.tolist()
         val = edata[:, relation].layers[layer].reshape(-1)
@@ -308,6 +394,7 @@ class SNIEE():
                't_statistic': t_statistic, 'p_value': p_value}
         return res
 
+    # SNIEE
     def _enrich_for_top_n(self, top_n, relation_list, gene_sets, organism, background):
         print('_enrich_for_top_n', top_n)
         gene_list = list(set(np.array([x.split('_') for x in relation_list[:top_n]]).reshape(-1)))
@@ -321,6 +408,7 @@ class SNIEE():
         df['top_n_ratio'] = df['n_gene'] / top_n
         return top_n, enr, df
 
+    # SNIEE
     def pathway_enrich(self, per_group, n_top_relations=None, n_space=10,
                        method='pearson', test_type='TER',
                        gene_sets=['KEGG_2021_Human',
@@ -351,25 +439,7 @@ class SNIEE():
         self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_res'] = enr_dict
         self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_df'] = df
 
-    def annot_perputation(self, n_neighbors=10, n_cluster=2, plot_label=[],
-                          method='all',
-                          plot=True):
-        # need improvement
-        seat = SEAT(affinity="gaussian_kernel",
-                    sparsification="knn_neighbors",
-                    objective="SE",
-                    n_neighbors=n_neighbors,
-                    strategy="bottom_up")
-        print(self.edata.uns[f'{method}_gene_hub'])
-        seat.fit_predict(self.edata[:, self.edata.uns[f'{method}_gene_hub']].layers[f'{method}_entropy'])
-        clusters = ('c' + seat.ks_clusters[f'K={n_cluster}'].astype(str)).tolist()
-        print(clusters)
-        self.adata.obs['per_seat_cluster'] = clusters
-        self.edata.obs = self.adata.obs
-        if True:
-            sc.pl.umap(self.adata, color=['per_seat_cluster', *plot_label])
-
-
+    # SNIEE
     def _assign_score_group(self, df, x, by='mean'):
         if by == 'median':
             cutoff = df['score'].quantile(0.5)
@@ -379,6 +449,7 @@ class SNIEE():
             return f'<= {by}'
         return f'> {by}'
 
+    # SNIEE
     def survival_analysis(self, ref_group,
                         per_group,
                         relations=None,
@@ -439,25 +510,26 @@ class SNIEE():
                 fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_{len(relations)}{test_type}s_{survival.upper()}_surv.png'
                 print_msg(f'[Output] The survival plot are saved to:\n{fn}')
 
-
+    
 class SNIEETime(SNIEE):
 
     def __init__(self, adata, **kwargs):
-        super().__init__(adata, **kwargs)
+        super().__init__(adata, class_type='time', **kwargs)
+        
 
-
-
-    def calculate_entropy(self, ref_obs, per_obss, layer='log1p'):
+    # SNIEETime
+    def calculate_entropy(self, ref_obs, per_obss, groupby, ref_time, layer='log1p'):
         print('reference observations', len(ref_obs))
         print('perputation groups', len(per_obss))
-
-        self.init_edata(per_obss, headers=['test', 'subject', 'time', 'symptom'])
+        self.ref_time = ref_time
+        self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby])
 
         if 'prod' in self.relation_methods:
             self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
         else:
             self._calculate_entropy(ref_obs, per_obss)
 
+    # SNIEETime
     def _calculate_entropy_by_prod(self, ref_obs, per_obss, layer='log1p',
                                    obs_cutoff=100):
         adata = self.adata
@@ -492,10 +564,10 @@ class SNIEETime(SNIEE):
             delta_std = np.abs(per_relation_std - ref_relation_std)
             edata.X[per_i, :] = delta_entropy * delta_std
 
-        edata.layers['prod_entropy'] = edata.X
+        edata.layers[f'{self.ref_time}_prod_entropy'] = edata.X
         self.edata = edata
 
-
+    # SNIEETime
     def _calculate_entropy(self, ref_obs, per_obss):
         adata_dict = {}
         print_msg(f'---Calculating the group entropy for reference')
@@ -510,6 +582,7 @@ class SNIEETime(SNIEE):
 
         self._calculate_delta_entropy(ref_obs, per_obss)
 
+    # SNIEETime
     def _calculate_delta_entropy(self, ref_obs, per_obss):
         self.per_obss = per_obss
         self.ref_obs = ref_obs
@@ -527,9 +600,9 @@ class SNIEETime(SNIEE):
         edata.var['gene2_i'] = col
 
         for method in self.relation_methods:
-            edata.layers[f'{method}_entropy'] = entropy_matrix.copy()
-            edata.layers[f'{method}_prob'] = entropy_matrix.copy()
-            edata.layers[f'{method}_bg_net'] = entropy_matrix.copy()
+            edata.layers[f'{self.ref_time}_{method}_entropy'] = entropy_matrix.copy()
+            edata.layers[f'{self.ref_time}_{method}_prob'] = entropy_matrix.copy()
+            edata.layers[f'{self.ref_time}_{method}_bg_net'] = entropy_matrix.copy()
 
         for i, per_obs in enumerate(per_obss):
             ref_adata = adata_dict[f'{ref_obs}']
@@ -540,16 +613,17 @@ class SNIEETime(SNIEE):
                 delta_entropy = np.abs(adata.varm[f'{method}_entropy'] - ref_adata.varm[f'{method}_entropy'])
                 val = (np.array(delta_entropy[row, col]) * np.array(delta_std[row, col])).reshape(-1)
                 # direct dot product will raise much more entry, further investigate
-                edata.layers[f'{method}_entropy'][i, :] = val
+                edata.layers[f'{self.ref_time}_{method}_entropy'][i, :] = val
 
                 val = adata.varm[f'{method}_bg_net'][row, col].reshape(-1)
-                edata.layers[f'{method}_bg_net'][i, :] = val
+                edata.layers[f'{self.ref_time}_{method}_bg_net'][i, :] = val
 
                 val = csr_matrix(adata.varm[f'{method}_prob'])[row, col].reshape(-1)
-                edata.layers[f'{method}_prob'][i, :] = val
+                edata.layers[f'{self.ref_time}_{method}_prob'][i, :] = val
 
         self.edata = edata
 
+    # SNIEETime
     def _calculate_group_entropy(self, obs):
         adata = self.adata[obs, :]
 
@@ -558,6 +632,7 @@ class SNIEETime(SNIEE):
             self._calculate_edge_entropy(adata, method)
         return adata
 
+    # SNIEETime
     def _calculate_node_entropy(self, adata, method):
         bg_net = self.adata.varm['bg_net']
         row, col = bg_net.nonzero()
@@ -587,6 +662,7 @@ class SNIEETime(SNIEE):
         entropy = - np.array(entropy_matrix.sum(axis=0))/norm
         adata.var[f'{method}_entropy'] = entropy.reshape(-1)
 
+    # SNIEETime
     def _calculate_edge_entropy(self, adata, method):
         row, col = adata.varm['bg_net'].nonzero()
 
@@ -594,137 +670,48 @@ class SNIEETime(SNIEE):
             val = (adata.var[key].to_numpy()[row]+adata.var[key].to_numpy()[col])/2
             adata.varm[key] = csr_matrix((val, (row, col)), shape = adata.varm['bg_net'].shape)
 
-    def find_ref_like_group(self, ref_groupby, ref_group, n_cluster=2, n_neighbors=10,
-                             plot=True, plot_label=[], out_prefix=None):
-        adata = self.adata
-
-        # cluster with expression
-        seat = SEAT(affinity="gaussian_kernel",
-                    sparsification="knn_neighbors",
-                    objective="SE",
-                    n_neighbors=n_neighbors,
-                    strategy="bottom_up")
-        seat.fit_predict(adata.obsm['X_umap'])
-        clusters = ('c' + seat.ks_clusters[f'K={n_cluster}'].astype(str)).tolist()
-        adata.obs['seat_cluster'] = clusters
-
-        if plot:
-            plot_label = [x for x in plot_label if x in adata.obs.columns]
-            sc.pl.umap(adata, color=['seat_cluster', *plot_label], show=False)
-            plt.savefig(f'{out_prefix}_umap.png')
-            plt.show()
-
-        count_df = pd.DataFrame(self.adata.obs[['seat_cluster', ref_groupby]].value_counts())
-        count_df = count_df.reset_index()
-        print(count_df)
-        ref_count_df = count_df[count_df[ref_groupby] == ref_group]
-
-        ref_count = ref_count_df['count'].max()
-        self.ref_like_group = count_df[count_df['count'] == ref_count]['seat_cluster'].tolist()[0]
-        self.per_like_group = [x for x in count_df['seat_cluster'] if x != self.ref_like_group][0]
-        print('ref_like_group is', self.ref_like_group)
-        print('per_like_group is', self.per_like_group)
-
-
-    def test_DER(self, groupby, ref_group, test_method="wilcoxon"):
-        super().test_DER(groupby, [ref_group], test_method=test_method)
-
-    def get_DER(self, per_group, n_top_relations=None,
-                p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
-                ):
+    # SNIEETime
+    def test_TER(self, per_group=None, p_cutoff=0.05, method='prod', groups=None):
+        myper_group = per_group
         edata = self.edata
-        df_list = []
 
-        for i, method in enumerate(self.relation_methods):
-            df = sc.get.rank_genes_groups_df(edata, group=per_group,
-                                             key=f'{method}_rank_genes_groups')
-            df['method'] = method
-
-            if p_adjust:
-                p_method = 'pvals_adj'
-            else:
-                p_method = 'pvals'
-
-            df['DER'] = (df[p_method] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)
-            if sortby in ['logfoldchanges', 'scores']:
-                df = df.sort_values(by=['DER', sortby], ascending=False)
-            if sortby == 'pvals_adj':
-                df = df.sort_values(by=['DER', sortby], ascending=[False, True])
-
-            df_list.append(df)
-
-            if n_top_relations:
-                top_df = df[df['DER']].head(n_top_relations)
-            else:
-                top_df = df[df['DER']]
-            if top_df.empty:
+        if groups is None:
+            groups = self.groups
+        for per_group in groups:
+            if per_group is not None and myper_group != per_group:
                 continue
-            relations = top_df['names'].tolist()
-            edata.uns[f'{method}_{self.groupby}_{per_group}_DER'] = relations
-
-            if i == 0:
-                common_DERs = set(relations)
-                all_DERs = set(relations)
-            else:
-                common_DERs = common_DERs & set(relations)
-                all_DERs = all_DERs | set(relations)
-
-        df = pd.concat(df_list)
-        if sortby in ['logfoldchanges', 'scores']:
-            df = df.sort_values(by=['DER', sortby], ascending=False)
-        else:
-            df = df.sort_values(by=['DER', sortby], ascending=[False, True])
-
-        fn = f'{self.out_dir}/{self.groupby}_{per_group}_DER.csv'
-        df.to_csv(fn, index=False)
-        print_msg(f'[Output] The differential expressed relation (DER) statistics are saved to:\n{fn}')
-        edata.uns[f'{self.groupby}_{per_group}_DER_df'] = df
-        edata.uns[f'{self.groupby}_{per_group}_common_DER'] = list(common_DERs)
-        edata.uns[f'{self.groupby}_{per_group}_all_DER'] = list(all_DERs)
-        # sort the all and common relations, to be continued
-        return
-
-    def test_TER(self, per_group, p_cutoff=0.05):
-        edata = self.edata
-
-        trend_list = []
-        for i, method in enumerate(self.relation_methods):
-            relations = []
-            for j, relation in enumerate(edata.uns[f'{method}_{self.groupby}_{per_group}_DER']):
+            trend_list = []
+            relations = edata.uns[f'{method}_{self.groupby}_{per_group}_DER']
+            filtered_relations = []
+            for relation in relations:
                 per_edata = edata[edata.obs[self.groupby] == per_group, :]
-                trend_res = self._test_trend(relation, per_edata, method=method, p_cutoff=p_cutoff)
+                layer = f'{self.ref_time}_{method}_entropy'
+                trend_res = self._test_trend(relation, per_edata, layer, p_cutoff=p_cutoff)
                 is_per_trend = trend_res['trend'] != 'no trend'
 
                 ref_edata = edata[edata.obs[self.groupby] != per_group, :]
-                zero_res = self._test_zero_trend(relation, ref_edata, method=method)
+                zero_res = self._test_zero_trend(relation, ref_edata, layer)
                 is_ref_zero = zero_res['p_value'] < p_cutoff
                 trend_res.update(zero_res)
 
                 is_TER = is_per_trend and is_ref_zero
                 trend_res['TER'] = is_TER
+                trend_res['per_group'] = per_group
                 if is_TER:
-                    relations.append(relation)
+                    filtered_relations.append(relation)
                 trend_list.append(trend_res)
 
-            print(method, 'diff', j+1, 'trend', len(relations))
-            edata.uns[f'{method}_{self.groupby}_{per_group}_TER'] = list(relations)
-            # common_TERs and all_TERs do not have order like '{method}_{self.groupby}_{per_group}_TER' above
-            if i == 0:
-                common_TERs = set(relations)
-                all_TERs = set(relations)
-            else:
-                common_TERs = common_TERs & set(relations)
-                all_TERs = all_TERs | set(relations)
+            print(f'{method}_{self.groupby}_{per_group}', 'DER', len(relations), 'TER', len(filtered_relations))
+            edata.uns[f'{method}_{self.groupby}_{per_group}_TER'] = filtered_relations
 
-        df = pd.DataFrame(trend_list)
-        fn = f'{self.out_dir}/{per_group}_TER.csv'
-        df.to_csv(fn, index=False)
-        print_msg(f'[Output] The trend expressed relation (TER) statistics are saved to:\n{fn}')
-        edata.uns[f'{per_group}_TER'] = df
-        edata.uns[f'common_TER'] = list(common_TERs)
-        edata.uns[f'all_TER'] = list(all_TERs)
+            df = pd.DataFrame(trend_list)
+            fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_TER.csv'
+            df.to_csv(fn, index=False)
+            print_msg(f'[Output] The trend expressed relation (TER) statistics are saved to:\n{fn}')
+            edata.uns[f'{method}_{self.groupby}_{per_group}_TER_df'] = df
         return
 
+    # SNIEETime
     def test_val_trend_entropy(self, relations, method='pearson',
                                p_cutoff=0.05,
                                out_prefix='./test'):
@@ -733,10 +720,11 @@ class SNIEETime(SNIEE):
         trend_list = []
         for relation in relations:
             if relation not in self.edata.var_names:
-                continue
-            trend_res = self._test_trend(relation, edata, method=method, p_cutoff=p_cutoff)
+                continue            
+            layer = f'{self.ref_time}_{method}_entropy'
+            trend_res = self._test_trend(relation, edata, layer, p_cutoff=p_cutoff)
             is_trend = trend_res['trend'] != 'no trend'
-            zero_res = self._test_zero_trend(relation, edata, method=method)
+            zero_res = self._test_zero_trend(relation, edata, layer)
             is_zero = zero_res['p_value'] < p_cutoff
             trend_res.update(zero_res)
 
@@ -756,15 +744,19 @@ class SNIEETime(SNIEE):
 
         return candidates
 
+    # SNIEETime
     def pathway_enrich(self, per_group, **kwargs):
         super(SNIEETime, self).pathway_enrich(per_group=per_group, **kwargs)
 
 
 class SNIEEGroup(SNIEE):
 
+    # SNIEEGroup
     def __init__(self, adata, **kwargs):
         super().__init__(adata, **kwargs)
+        self.class_type = 'group'
 
+    # SNIEEGroup
     def calculate_ref_entropy(self, groupby, groups, layer='log1p', obs_cutoff=100):
         adata = self.adata
         X = get_array(adata, layer=layer)
@@ -789,6 +781,7 @@ class SNIEEGroup(SNIEE):
             gene_std = X[ref_obs_is].std(axis=0)
             self.ref_std_dict[group] = (gene_std[row]+gene_std[col])/2
 
+    # SNIEEGroup
     def load_ref_entropy(self, train_sniee_obj):
         ref_edata = train_sniee_obj.edata
         edata = self.edata
@@ -817,8 +810,9 @@ class SNIEEGroup(SNIEE):
             self.ref_std_dict[group] = ref_std
         self.ref_obs_is_dict = train_sniee_obj.ref_obs_is_dict
 
-    def calculate_entropy(self, groupby, per_obss, layer='log1p', obs_cutoff=100,
-                          train_sniee_obj=None,
+    # SNIEEGroup
+    def calculate_entropy(self, groupby, layer='log1p', obs_cutoff=100,
+                          method='prod', train_sniee_obj=None,
                           headers=[]):
         adata = self.adata
         X = get_array(adata, layer=layer)
@@ -826,11 +820,14 @@ class SNIEEGroup(SNIEE):
 
         if groupby not in adata.obs:
             raise KeyError(f'{groupby} not in adata.obs.')
-
+        if method != 'prod':
+            raise KeyError(f'method "{method}" should be "prod".')
+        
         groups = adata.obs[groupby].unique()
         self.groups = groups
         print('cluster groups', len(groups))
 
+        per_obss = [[x] for x in adata.obs_names]
         self.init_edata(per_obss, headers=['test', 'subject', groupby] + headers)
         edata = self.edata
 
@@ -861,104 +858,92 @@ class SNIEEGroup(SNIEE):
                 per_relation_std = (gene_std[row]+gene_std[col])/2
                 delta_std = np.abs(per_relation_std - self.ref_std_dict[ref_group])
                 edata.X[per_i, :] = delta_entropy * delta_std
-            edata.layers[f'{ref_group}_prod_entropy'] = edata.X
+            edata.layers[f'{ref_group}_{method}_entropy'] = edata.X
 
-    def test_DER(self, groupby, test_method="wilcoxon"):
-        super().test_DER(groupby, self.groups, test_method=test_method)
-
-    def get_DER(self, n_top_relations=None, method='prod',
-                p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='pvals_adj',
-                ):
+    # SNIEEGroup
+    def test_TER(self, per_group=None, p_cutoff=0.05, method='prod', groups=None):
         edata = self.edata
-        df_list = []
-
-        for per_group, ref_group in permutations(self.groups, 2):
-            df = sc.get.rank_genes_groups_df(edata, group=per_group,
-                                             key=f'{method}_rank_genes_groups_{ref_group}')
-            df['method'] = method
-            df['per_group'] = per_group
-            df['ref_group'] = ref_group
-
-            print(df)
-
-            if p_adjust:
-                p_method = 'pvals_adj'
-            else:
-                p_method = 'pvals'
-
-            df['_DER'] = (df[p_method] < p_cutoff) & (df['logfoldchanges'] > fc_cutoff)
-            df_list.append(df)
-
-        df = pd.concat(df_list)
-        #print(df[df['_DER']])
-        edata.uns[f'{self.groupby}_DER_df'] = df
-        fn = f'{self.out_dir}/{self.groupby}_DER.csv'
-        df.to_csv(fn, index=False)
-        print_msg(f'[Output] The differential expressed relation (DER) statistics are saved to:\n{fn}')
-
-        tmp = df[df['_DER']][['names', 'per_group', 'method']]
-        count_df = tmp.value_counts()
-        count_df = count_df[count_df == (len(self.groups) - 1)]
-        count_df = count_df.reset_index()
-
-        for per_group in self.groups:
-            if per_group not in count_df['per_group'].unique():
-                edata.uns[f'{method}_{self.groupby}_{per_group}_DER'] = []
-                continue
-
-            tmp = count_df[(count_df['per_group'] == per_group) & (count_df['method'] == method)]
-            relations = tmp.names.tolist()
-            edata.uns[f'{method}_{self.groupby}_{per_group}_DER'] = relations
-
-        # fix the top n problem
-        '''
-        if sortby in ['logfoldchanges', 'scores']:
-            df = df.sort_values(by=['DER', sortby], ascending=False)
-        else:
-            df = df.sort_values(by=['DER', sortby], ascending=[False, True])
-        '''
-        return
-
-    def test_TER(self, p_cutoff=0.05, method='prod', groups=None):
-        edata = self.edata
-
-        trend_list = []
+        myper_group = per_group
 
         if groups is None:
             groups = self.groups
         for per_group in groups:
+            if myper_group is not None and per_group != myper_group:
+                continue
             relations = edata.uns[f'{method}_{self.groupby}_{per_group}_DER']
+            trend_list = []
             filtered_relations = []
-            for j, relation in enumerate(relations):
+            for relation in relations:
+                is_TER = []
+                for ref_group in groups:
+                    if ref_group == per_group:
+                        continue
+                    layer = f'{ref_group}_{method}_entropy' 
+                    ref_edata = edata[edata.obs[self.groupby] == ref_group, :]
+                    zero_res = self._test_zero_trend(relation, ref_edata, layer)
+                    is_ref_zero = zero_res['p_value'] < p_cutoff
 
-                ref_edata = edata[edata.obs[self.groupby] != per_group, :]
-                zero_res = self._test_zero_trend(relation, ref_edata, f'{ref_group}_{method}_entropy')
-                is_ref_zero = zero_res['p_value'] < p_cutoff
-
-                is_TER =  is_ref_zero
-                zero_res['TER'] = is_TER
-                if is_TER:
+                    is_TER.append(is_ref_zero)
+                    zero_res['is_ref_zero'] = is_ref_zero
+                    zero_res['ref_group'] = ref_group
+                    zero_res['per_group'] = per_group
+                    trend_list.append(zero_res)
+                if all(is_TER):
                     filtered_relations.append(relation)
-                trend_list.append(zero_res)
-
-            print(per_group, method, 'diff', len(relations), 'trend', len(filtered_relations))
+                    
+            print(f'{method}_{self.groupby}_{per_group}', 'DER', len(relations), 'TER', len(filtered_relations))
             edata.uns[f'{method}_{self.groupby}_{per_group}_TER'] = list(filtered_relations)
 
-        df = pd.DataFrame(trend_list)
-        fn = f'{self.out_dir}/{self.groupby}_TER.csv'
-        df.to_csv(fn, index=False)
-        print_msg(f'[Output] The trend expressed relation (TER) statistics are saved to:\n{fn}')
-        edata.uns[f'{self.groupby}_TER_df'] = df
+            df = pd.DataFrame(trend_list)
+            if not df.empty:
+                df['TER'] = df['relation'].apply(lambda x: True if x in filtered_relations else False)
+            fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_TER.csv'
+            df.to_csv(fn, index=False)
+            print_msg(f'[Output] The trend expressed relation (TER) {len(filtered_relations)} statistics are saved to:\n{fn}')
+            edata.uns[f'{method}_{self.groupby}_{per_group}_TER_df'] = df
         return
 
+    # SNIEEGroup
     def pathway_enrich(self, groups=None, **kwargs):
         if groups is None:
             groups = self.groups
         for per_group in groups:
             super(SNIEEGroup, self).pathway_enrich(per_group=per_group, **kwargs)
 
+    # SNIEEGroup
     def survival_analysis(self, ref_group, groups=None, **kwargs):
         if groups is None:
             groups = self.groups
         for per_group in groups:
             super().survival_analysis(ref_group, per_group=per_group, **kwargs)
+
+class SNIEETimeGroup(SNIEETime):
+
+    def __init__(self, adata, **kwargs):
+        super().__init__(adata, **kwargs)
+        self.class_type = 'timegroup'
+
+    # SNIEETimeGroup
+    def calculate_entropy(self, tgroupby, groupby, ref_time='Ref', layer='log1p'):
+        self.ref_time = ref_time
+
+        edata_list = []
+        for group in self.adata.obs[groupby].unique():
+            adata = self.adata[self.adata.obs[groupby] == group]
+            ref_obs = adata[adata.obs[tgroupby] == ref_time].obs_names
+            per_obss = [[x] for x in adata.obs_names]
+            print(group, 'reference observations', len(ref_obs))
+            print(group, 'perputation groups', len(per_obss))
+
+            self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby])
+            
+            if 'prod' in self.relation_methods:
+                self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
+            else:
+                self._calculate_entropy(ref_obs, per_obss)
+            
+            edata = self.edata
+            edata_list.append(edata)
+
+        edata = ad.concat(edata_list)
+        self.edata = edata

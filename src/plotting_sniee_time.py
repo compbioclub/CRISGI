@@ -8,39 +8,45 @@ import src.plotting as pl
 from src.util import print_msg
 
 
-def relation_score_line(sniee_obj, method='pearson', test_type='TER', 
-                        groupby=None, per_group=None,
+def relation_score_line(sniee_obj, per_group=None, 
+                        method='pearson', test_type='TER', 
                         relations=None, unit_header='subject',
                    title='', out_prefix='test',
                    ax=None):
     edata = sniee_obj.edata
-    if groupby is None:
-        groupby = sniee_obj.groupby
-    df = edata.obs.copy()
-    if relations is None:
-        relations = edata.uns[f'{method}_{groupby}_{per_group}_{test_type}']
-    else:
-        relations = [x for x in relations if x in edata.var_names]
+    myper_group = per_group
+    for per_group in sniee_obj.groups:
+        if myper_group is not None and per_group != myper_group:
+            continue
+        df = edata.obs.copy()
+        if relations is None:
+            key = f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}'
+            print(key)
+            myrelations = edata.uns[key]
+        else:
+            myrelations = [x for x in relations if x in edata.var_names]
+        print(relations)
+        df['avg(score)'] = edata[:, myrelations].layers[f'{sniee_obj.ref_time}_{method}_entropy'].mean(axis=1)
 
-    df['avg(score)'] = edata[:, relations].layers[f'{method}_entropy'].mean(axis=1)
-
-    if unit_header is not None:
-        sns.lineplot(df, x='time', y='avg(score)', hue=groupby, units=unit_header, estimator=None,
-                     ax=ax)
-    else:
-        sns.lineplot(df, x='time', y='avg(score)', hue=groupby, 
-                     ax=ax)
-                
-    title += f'{sniee_obj.dataset}\n{method} entropy score of {len(relations)} {test_type}s '
-    if ax is not None:
-        ax.set_title(title)
-    elif out_prefix:
-        plt.title(title)
-        plt.savefig(f'{out_prefix}_{title}_relation_score.png'.replace('\n', ' '))
-        plt.show()
-    else:
-        plt.title(title)
-        plt.show()
+        if unit_header is not None:
+            print(df)
+            sns.lineplot(df, x='time', y='avg(score)', hue=sniee_obj.groupby, 
+                        units=unit_header, estimator=None,
+                        ax=ax)
+        else:
+            sns.lineplot(df, x='time', y='avg(score)', hue=sniee_obj.groupby, 
+                        ax=ax)
+                    
+        mytitle = title + f'{sniee_obj.dataset} per {per_group}\n{method} entropy score of {len(myrelations)} {test_type}s '
+        if ax is not None:
+            ax.set_title(mytitle)
+        elif out_prefix:
+            plt.title(mytitle)
+            plt.savefig(f'{out_prefix}_{mytitle}_relation_score.png'.replace('\n', ' '))
+            plt.show()
+        else:
+            plt.title(mytitle)
+            plt.show()
 
 def get_relation_score(sniee_obj, per_group, groupby=None, relations=None, 
                        method='pearson', test_type='TER',

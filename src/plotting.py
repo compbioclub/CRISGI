@@ -178,7 +178,8 @@ def draw_gene_network(sniee_obj, per_group,
                       n_top_relations=100,
                     cmap='viridis'):
     net = Network(notebook=True, cdn_resources='in_line')
-    df = sniee_obj.edata.uns[f'{sniee_obj.groupby}_{per_group}_DER_df']
+    print(sniee_obj.edata)
+    df = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_DER_df']
     df = df[(df.method == method) & df['DER']]
     df.index = df.names
     gene2pvals_adj = df['pvals_adj'].to_dict()
