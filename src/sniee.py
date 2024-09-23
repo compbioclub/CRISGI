@@ -678,7 +678,7 @@ class SNIEETime(SNIEE):
         if groups is None:
             groups = self.groups
         for per_group in groups:
-            if per_group is not None and myper_group != per_group:
+            if myper_group is not None and myper_group != per_group:
                 continue
             trend_list = []
             relations = edata.uns[f'{method}_{self.groupby}_{per_group}_DER']
@@ -921,21 +921,26 @@ class SNIEETimeGroup(SNIEETime):
 
     def __init__(self, adata, **kwargs):
         super().__init__(adata, **kwargs)
-        self.class_type = 'timegroup'
+        self.class_type = 'time'
 
     # SNIEETimeGroup
-    def calculate_entropy(self, tgroupby, groupby, ref_time='Ref', layer='log1p'):
+    def calculate_entropy(self, tgroupby, groupby, ref_time='Ref', layer='log1p',
+                          ref_as_per=True,
+                          headers=[]):
         self.ref_time = ref_time
 
         edata_list = []
         for group in self.adata.obs[groupby].unique():
             adata = self.adata[self.adata.obs[groupby] == group]
             ref_obs = adata[adata.obs[tgroupby] == ref_time].obs_names
-            per_obss = [[x] for x in adata.obs_names]
+            if ref_as_per:
+                per_obss = [[x] for x in adata.obs_names]
+            else:
+                per_obss = [[x] for x in adata[adata.obs[tgroupby] != ref_time].obs_names]           
             print(group, 'reference observations', len(ref_obs))
             print(group, 'perputation groups', len(per_obss))
 
-            self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby])
+            self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby]+headers)
             
             if 'prod' in self.relation_methods:
                 self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
