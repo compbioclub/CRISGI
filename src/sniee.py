@@ -460,7 +460,7 @@ class SNIEE():
             myrelations = [x for x in relations if x in edata.var_names]
 
         genes1 = [x.split('_')[0] for x in myrelations]
-        genes2 = [x.split('_')[0] for x in myrelations]
+        genes2 = [x.split('_')[1] for x in myrelations]
 
         sub_adata = adata[(adata.obs[self.groupby] == myper_group)]
         sub_adata = sub_adata[sub_adata.obs.sort_values(by=[unit_header, 'time']).index]
