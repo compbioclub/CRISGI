@@ -154,6 +154,55 @@ def generate_relation_score_images(folder_path, output_path, robust=False, scale
 
             plt.close()
 
+
+def plot_relation(obj, per_group=None, 
+                  layer='log1p',
+                  method='pearson', test_type='TER', 
+                  relations=None, subject_header='subject',
+                   title='', out_prefix='test',
+                   ax=None):
+    edata = obj.edata
+    adata = obj.adata
+    myper_group = per_group
+
+    if relations is None:
+        key = f'{method}_{obj.groupby}_{per_group}_{test_type}'
+        myrelations = edata.uns[key]
+    else:
+        myrelations = [x for x in relations if x in edata.var_names]
+
+    genes1 = [x.split('_')[0] for x in myrelations]
+    genes2 = [x.split('_')[0] for x in myrelations]
+
+    subjects = edata.obs[subject_header].unique()
+    times = np.sort(edata.obs['time'].unique())
+    time2i = {x:i for i, x in enumerate(times)}
+    print('subjects', len(subjects), 'times', len(times))
+    for i, subject in enumerate(subjects):
+        if myper_group is not None:
+            sub_adata = adata[(adata.obs[subject_header] == subject) & (adata.obs[obj.groupby] == myper_group)]
+        else:
+            sub_adata = adata[adata.obs[subject_header] == subject]
+        if sub_adata.shape[0] == 0:
+            continue
+        print(subject)
+        t_is = [time2i[t] for t in sub_adata.obs['time']]
+        X = np.zeros((len(genes1), len(times)))
+        
+        X[:, t_is] = np.multiply(sub_adata[:, genes1].layers[layer], 
+                                 sub_adata[:, genes2].layers[layer]).T
+        df = pd.DataFrame(X, columns=times, index=myrelations)
+        print(X)
+        #if out_dir is None:
+        #    out_dir = obj.out_dir
+        #fn = f'{out_dir}/{subject}_{method}_{obj.groupby}_{per_group}_{test_type}{len(relations)}_relation_score.csv'
+        #df.to_csv(fn)
+        #print_msg(f'[Output] The subject {subject} {method} {groupby} {per_group} {test_type}{len(relations)} entropy scores are saved to:\n{fn}')
+        sns.clustermap(df, col_cluster=False)
+        plt.suptitle(f'Subject {subject}')
+        plt.show()
+
+
 def draw_gene_network(*args, **kwargs):
     pl.draw_gene_network(*args, **kwargs)
 

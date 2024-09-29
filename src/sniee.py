@@ -74,7 +74,11 @@ class SNIEE():
         if 'bg_net' not in self.adata.varm:
             if bg_net is None:
                 if genes is None:
-                    genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
+                    if 'highly_variable' in self.adata.var:
+                        genes = self.adata.var_names[self.adata.var['highly_variable']].sort_values()
+                    else:
+                        genes = self.adata.var_names.sort_values()
+                        print(genes)
                 else:
                     genes = np.sort(genes)
                 self.adata = self.adata[:, genes]
@@ -438,6 +442,70 @@ class SNIEE():
 
         self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_res'] = enr_dict
         self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_df'] = df
+
+
+    def find_relation_hub(self, per_group, layer='log1p',
+                          method='prod', test_type='TER', 
+                          relations=None, unit_header='subject',
+                          out_dir=None,    
+                          n_neighbors=10, strategy='bottom_up'):
+        edata = self.edata
+        adata = self.adata
+        myper_group = per_group
+
+        if relations is None:
+            key = f'{method}_{self.groupby}_{per_group}_{test_type}'
+            myrelations = edata.uns[key]
+        else:
+            myrelations = [x for x in relations if x in edata.var_names]
+
+        genes1 = [x.split('_')[0] for x in myrelations]
+        genes2 = [x.split('_')[0] for x in myrelations]
+
+        sub_adata = adata[(adata.obs[self.groupby] == myper_group)]
+        sub_adata = sub_adata[sub_adata.obs.sort_values(by=[unit_header, 'time']).index]
+
+        X = np.multiply(sub_adata[:, genes1].layers[layer], 
+                                    sub_adata[:, genes2].layers[layer]).T
+        df = pd.DataFrame(X, columns=sub_adata.obs.test, index=myrelations)
+
+        seat = SEAT(affinity="gaussian_kernel",
+                    sparsification="knn_neighbors_from_X",
+                    objective="SE",
+                    n_neighbors=n_neighbors,
+                    strategy=strategy,
+                    verbose=False)
+        seat.fit_predict(X)
+
+        label = seat.labels_
+        label_colors = dict(zip(set(label), sns.color_palette('Spectral', len(set(label)))))
+        label_colors = [label_colors[l] for l in label]
+
+        units = sub_adata.obs[unit_header].unique()
+        col_colors = dict(zip(units, sns.color_palette('Spectral', len(units))))
+        col_colors = [col_colors[x] for x in sub_adata.obs[unit_header]]
+        
+        sns.clustermap(df,
+                    row_linkage=seat.Z_,
+                    col_cluster=False,
+                    row_colors=label_colors,
+                    col_colors=col_colors,
+                    cmap='YlGnBu')
+
+        if out_dir is None:
+            out_dir = self.out_dir
+        fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myrelations)}_relation_matrix.csv'
+        df.to_csv(fn)
+        print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myrelations)} relation matrix are saved to:\n{fn}')
+
+        df = pd.DataFrame({'relation':myrelations,
+                          'community':seat.labels_,
+                          'hub':seat.clubs})
+
+        fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myrelations)}_relation_community_hub.csv'
+        df.to_csv(fn)
+        print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myrelations)} relation community & hub are saved to:\n{fn}')
+
 
     # SNIEE
     def _assign_score_group(self, df, x, by='mean'):
@@ -941,6 +1009,41 @@ class SNIEETimeGroup(SNIEETime):
             print(group, 'perputation groups', len(per_obss))
 
             self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby]+headers)
+            
+            if 'prod' in self.relation_methods:
+                self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
+            else:
+                self._calculate_entropy(ref_obs, per_obss)
+            
+            edata = self.edata
+            edata_list.append(edata)
+
+        edata = ad.concat(edata_list)
+        self.edata = edata
+
+class SNIEEGroupTime(SNIEETime):
+
+    def __init__(self, adata, **kwargs):
+        super().__init__(adata, **kwargs)
+        self.class_type = 'grouptime'
+
+    # SNIEEGroupTime
+    def calculate_entropy(self, tgroupby, groupby, ref_group, layer='log1p',
+                          ref_as_per=True,
+                          headers=[]):
+        self.ref_time = ref_group
+        edata_list = []
+        for tgroup in self.adata.obs[tgroupby].unique():
+            adata = self.adata[self.adata.obs[tgroupby] == tgroup]
+            ref_obs = adata[adata.obs[groupby] == ref_group].obs_names
+            if ref_as_per:
+                per_obss = [[x] for x in adata.obs_names]
+            else:
+                per_obss = [[x] for x in adata[adata.obs[groupby] != ref_group].obs_names]           
+            print(tgroup, 'reference observations', len(ref_obs))
+            print(tgroup, 'perputation groups', len(per_obss))
+
+            self.init_edata(per_obss, headers=['test', 'subject', tgroupby, groupby]+headers)
             
             if 'prod' in self.relation_methods:
                 self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
