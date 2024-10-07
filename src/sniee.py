@@ -15,6 +15,7 @@ from sksurv.nonparametric import kaplan_meier_estimator
 from sksurv.compare import compare_survival
 from itertools import chain, permutations
 import gseapy as gp
+from gseapy import gseaplot
 import pymannkendall as mk
 from multiprocessing import Pool
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -444,14 +445,21 @@ class SNIEE():
         self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_df'] = df
 
     # SNIEE
-    def prerank_enrich_gene(self, sortby='pvals_adj',
+    def prerank_enrich_gene(self, sortby='pvals_adj', n_top_relations=None,
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'], 
                         prefix = 'test',                            
                        min_size=5, max_size=1000, permutation_num=1000, seed=0,
                        ):
-        df = self.edata.uns['rank_genes_groups_df']
+        if n_top_relations is None:
+            n_top_relations = len(self.edata.uns['rank_genes_groups_df'])
+        if n_top_relations > len(self.edata.uns['rank_genes_groups_df']):
+            n_top_relations = len(self.edata.uns['rank_genes_groups_df'])
+        if n_top_relations < 1:
+            n_top_relations = 1
+                
+        df = self.edata.uns['rank_genes_groups_df'][0:n_top_relations]
         df = df[['names', sortby]]
         df['gene1'] = df['names'].apply(lambda x: x.split('_')[0])
         df['gene2'] = df['names'].apply(lambda x: x.split('_')[1])
@@ -460,7 +468,7 @@ class SNIEE():
         df1.columns = ['gene', sortby]
         df2.columns = ['gene', sortby]
         df = pd.concat([df1, df2])
-        df = df.groupby('gene').mean()
+        df = df.groupby('gene').sum()
         df = df.reset_index()
         rank_df = df.sort_values(sortby, ascending=False)
         rank_df = rank_df.reset_index()
@@ -470,19 +478,21 @@ class SNIEE():
                          threads=self.n_threads,
                          min_size=min_size, max_size=max_size,
                          permutation_num=permutation_num,
-                         outdir=self.out_dir + '/' + prefix,
+                         outdir=f'{self.out_dir}/{prefix}',
                          seed=seed,
                          verbose=True
                          )
-
+        self.gp_res = res
+        
         for term in res.results.keys():
             rank_df[f'{term} hits'] = [1 if x in res.results[term]['hits'] else 0 for x in rank_df.index]
-            rank_df[f'{term} RES'] = res.results[term]['RES']        
-        rank_df.to_csv(self.out_dir + '/' + prefix + '/rank.csv')
+            rank_df[f'{term} RES'] = res.results[term]['RES']
+            # gseaplot(rank_metric=res.ranking, term=term, ofname=f'{self.out_dir}/{prefix}/{term}.pdf', **res.results[term])
+        rank_df.to_csv(f'{self.out_dir}/{prefix}/rank.csv')
+        
     
     # SNIEE
-    def prerank_gsva_relation(self, gene_sets, prefix='test',
-                       ):
+    def prerank_gsva_relation(self, gene_sets, prefix='test',):
         df = pd.DataFrame(self.edata.X.T, columns=self.edata.obs_names,
                         index=self.edata.var_names)
         es = gp.gsva(data=df, gene_sets=gene_sets, 
@@ -492,6 +502,10 @@ class SNIEE():
         df['subject'] = df['Name'].apply(lambda x: x.split(' ')[0])
         df['time'] = df['Name'].apply(lambda x: int(x.split(' ')[1]))
         df = df.sort_values(by=['ES'])
+        df.to_csv(f'./{self.out_dir}/{prefix}/prerank_gsva_relation.csv')
+        
+        self.gp_es = es
+        
         for term in gene_sets.keys():
             term_df = df[df['Term'] == term]
             sns.lineplot(term_df, x='time', y='ES', hue=self.groupby, 
