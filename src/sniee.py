@@ -485,9 +485,8 @@ class SNIEE():
                        ):
         df = pd.DataFrame(self.edata.X.T, columns=self.edata.obs_names,
                         index=self.edata.var_names)
-        es = gp.gsva(data=df,
-                    gene_sets=gene_sets,
-                    outdir=self.out_dir + '/' + prefix)
+        es = gp.gsva(data=df, gene_sets=gene_sets, 
+                     outdir=self.out_dir + '/' + prefix)
         df = es.res2d
         df[self.groupby] = df['Name'].apply(lambda x: self.edata.obs[self.groupby].to_dict()[x])
         df['subject'] = df['Name'].apply(lambda x: x.split(' ')[0])
@@ -506,7 +505,7 @@ class SNIEE():
             plt.show()
 
     # SNIEE
-    def find_relation_hub(self, per_group, layer='log1p',
+    def find_relation_module(self, per_group, layer='log1p',
                           method='prod', test_type='TER', 
                           relations=None, unit_header='subject',
                           out_dir=None,    
@@ -562,12 +561,15 @@ class SNIEE():
 
         df = pd.DataFrame({'relation':myrelations,
                           'community':seat.labels_,
-                          'hub':seat.clubs})
+                          'module':seat.clubs})
 
         fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myrelations)}_relation_community_hub.csv'
         df.to_csv(fn)
         print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myrelations)} relation community & hub are saved to:\n{fn}')
-
+        fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myrelations)}_relation_hierarchy.nwk'        
+        with open(fn, 'w') as f:
+            f.write(seat.newick)
+        print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myrelations)} relation hierarchy are saved to:\n{fn}')
 
     # SNIEE
     def _assign_score_group(self, df, x, by='mean'):
