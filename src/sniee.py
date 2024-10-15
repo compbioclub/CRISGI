@@ -499,8 +499,8 @@ class SNIEE():
                      outdir=self.out_dir + '/' + prefix)
         df = es.res2d
         df[self.groupby] = df['Name'].apply(lambda x: self.edata.obs[self.groupby].to_dict()[x])
-        df['subject'] = df['Name'].apply(lambda x: x.split(' ')[0])
-        df['time'] = df['Name'].apply(lambda x: int(x.split(' ')[1]))
+        df['subject'] = df['Name'].apply(lambda x: x.split(' ')[-2])
+        df['time'] = df['Name'].apply(lambda x: float(x.split(' ')[-1]))
         df = df.sort_values(by=['ES'])
         df.to_csv(f'./{self.out_dir}/{prefix}/prerank_gsva_relation.csv')
         
