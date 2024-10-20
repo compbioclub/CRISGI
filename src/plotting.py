@@ -175,9 +175,9 @@ def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
         
 def draw_gene_network(sniee_obj, per_group,
                       method='pearson', test_type='TER',
-                      n_top_relations=100,
+                      n_top_relations=100, rdf=None,
                     cmap='viridis'):
-    net = Network(notebook=True, cdn_resources='in_line')
+    net = Network(notebook=True, height='1000px', width='1000px', cdn_resources='in_line')
     print(sniee_obj.edata)
     df = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_DER_df']
     df = df[(df.method == method) & df['DER']]
@@ -185,23 +185,26 @@ def draw_gene_network(sniee_obj, per_group,
     gene2pvals_adj = df['pvals_adj'].to_dict()
     gene2pvals = df['pvals'].to_dict()
     gene2scores = df['scores'].to_dict()
+    gene2modules = rdf['module'].to_dict()
     gene2logfoldchanges = df['logfoldchanges'].to_dict()
     
     relation_list = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}'][:n_top_relations]
 
-    weights = [ gene2scores[relation] for relation in relation_list]
-    norm = mcolors.Normalize(vmin=min(weights), vmax=max(weights), clip=True)
-    cmap = cm.get_cmap(cmap)
+    label = rdf['module'].unique()
+    label_colors = dict(zip(set(label), sns.color_palette(cmap, len(set(label)))))
 
     for relation in relation_list:
         gene1, gene2 = relation.split('_')
 
-        net.add_node(gene1, label=gene1)
-        net.add_node(gene2, label=gene2)        
+        net.add_node(gene1, label=gene1, font={'size': 30}, 
+                     size=5, borderWidth=1, color='gray', borderColor='gray')
+        net.add_node(gene2, label=gene2, font={'size': 30}, 
+                     size=5, borderWidth=1, color='gray', borderColor='gray')        
 
         score = gene2scores[relation]
-        rgba_color = cmap(norm(score))
-        hex_color = mcolors.rgb2hex(rgba_color)
+        module = gene2modules[relation]
+        rbga_color = label_colors[module]
+        hex_color = mcolors.rgb2hex(rbga_color)
         title = f'scores: {gene2scores[relation]:.2f}\n'
         title += f'logfoldchanges: {gene2logfoldchanges[relation]:.2f}\n'
         title += f'pvals: {gene2pvals[relation]:.2f}\n'
