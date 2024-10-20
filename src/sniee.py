@@ -559,6 +559,7 @@ class SNIEE():
 
         edata.obs[f'top_{top_n}_overlap'] = overlap_stats
         edata.obs[f'top_{top_n}_overlap_ratio'] = np.array(overlap_stats) / top_n
+        pd.DataFrame(edata.obs).to_csv(f'./{out_dir}/top_{top_n}_overlap.csv')
 
     # SNIEE
     def find_relation_module(self, per_group, layer='log1p',
@@ -627,6 +628,7 @@ class SNIEE():
                           'module':seat.clubs})
 
         df.index = df.relation
+        df = df.drop(columns=['relation'])
         fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myrelations)}_relation_community_module.csv'
         df.to_csv(fn)
         print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myrelations)} relation community & module are saved to:\n{fn}')
