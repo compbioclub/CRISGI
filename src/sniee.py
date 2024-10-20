@@ -78,7 +78,7 @@ class SNIEE():
                         genes = self.adata.var_names[self.adata.var['highly_variable']]
                     else:
                         genes = self.adata.var_names
-
+                    
                 self.adata = self.adata[:, self.adata.var_names.isin(genes)]
                 genes = np.array(list(set(genes).intersection(self.adata.var_names)))
                 genes = np.sort(genes)
@@ -87,7 +87,7 @@ class SNIEE():
                 bg_net, _ = self.load_bg_net_from_genes(genes)
         else:
             bg_net = csr_matrix(np.triu(self.adata.varm['bg_net']))
-        self.adata.varm['bg_net'] = bg_net
+        self.adata.varm['bg_net'] = bg_net 
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
     # SNIEE
@@ -324,7 +324,7 @@ class SNIEE():
         return df
 
     #SNIEE
-    def get_DER(self, per_group=None, n_top_relations=None, method='prod',
+    def get_DER(self, per_group=None, n_top_relations=None, method='prod', 
                 p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='scores',
                 ):
         myper_group = per_group
@@ -448,8 +448,8 @@ class SNIEE():
     def prerank_enrich_gene(self, sortby='pvals_adj',
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
-                                  'MSigDB_Hallmark_2020'],
-                        prefix = 'test',
+                                  'MSigDB_Hallmark_2020'], 
+                        prefix = 'test',                            
                        min_size=5, max_size=1000, permutation_num=1000, seed=0,
                        ):
         df = self.edata.uns['rank_genes_groups_df']
@@ -478,9 +478,9 @@ class SNIEE():
 
         for term in res.results.keys():
             rank_df[f'{term} hits'] = [1 if x in res.results[term]['hits'] else 0 for x in rank_df.index]
-            rank_df[f'{term} RES'] = res.results[term]['RES']
+            rank_df[f'{term} RES'] = res.results[term]['RES']        
         rank_df.to_csv(self.out_dir + '/' + prefix + '/rank.csv')
-
+    
     # SNIEE
     def prerank_gsva_relation(self, gene_sets, prefix='test',
                               min_size=5,
@@ -498,9 +498,9 @@ class SNIEE():
         '''
         for term in gene_sets.keys():
             term_df = df[df['Term'] == term]
-            sns.lineplot(term_df, x='time', y='ES', hue=self.groupby,
+            sns.lineplot(term_df, x='time', y='ES', hue=self.groupby, 
                         units='subject', estimator=None)
-
+          
             plt.title(term)
             plt.show()
             sns.barplot(term_df, x='Name', y='ES', hue=self.groupby)
@@ -510,10 +510,10 @@ class SNIEE():
             plt.show()
         '''
         return df
-
+    
     # SNIEE
-    def check_common_diff(self, top_n, per_group, layer='log1p',
-                          method='prod', test_type='TER',
+    def check_common_diff(self, top_n, per_group, layer='log1p', 
+                          method='prod', test_type='TER', 
                           relations=None, unit_header='subject',
                           out_dir=None):
         edata = self.edata
@@ -525,7 +525,7 @@ class SNIEE():
             myrelations = edata.uns[key]
         else:
             myrelations = [x for x in relations if x in edata.var_names]
-
+        
         if self.class_type == 'time':
             edata_layer_ref = self.ref_time
         #else:
@@ -548,7 +548,7 @@ class SNIEE():
 
     # SNIEE
     def find_relation_module(self, per_group, layer='log1p',
-                          method='prod', test_type='TER',
+                          method='prod', test_type='TER', 
                           relations=None, unit_header='subject',
                           out_dir=None, label_df=None,
                           n_neighbors=10, strategy='bottom_up'):
@@ -568,7 +568,7 @@ class SNIEE():
         sub_adata = adata[(adata.obs[self.groupby] == myper_group)]
         sub_adata = sub_adata[sub_adata.obs.sort_values(by=[unit_header, 'time']).index]
 
-        X = np.multiply(sub_adata[:, genes1].layers[layer],
+        X = np.multiply(sub_adata[:, genes1].layers[layer], 
                                     sub_adata[:, genes2].layers[layer]).T
         df = pd.DataFrame(X, columns=sub_adata.obs.test, index=myrelations)
 
@@ -594,7 +594,7 @@ class SNIEE():
         units = sub_adata.obs[unit_header].unique()
         col_colors = dict(zip(units, sns.color_palette('Spectral', len(units))))
         col_colors = [col_colors[x] for x in sub_adata.obs[unit_header]]
-
+        
         sns.clustermap(df,
                     row_linkage=seat.Z_,
                     col_cluster=False,
@@ -616,11 +616,11 @@ class SNIEE():
         df.to_csv(fn)
         print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myrelations)} relation community & module are saved to:\n{fn}')
         return df
-
+    
     def network_analysis(self, per_group, layer='log1p',
-                          method='prod', test_type='TER',
+                          method='prod', test_type='TER', 
                           relations=None, unit_header='subject',
-                          out_dir=None,
+                          out_dir=None,    
                           n_neighbors=10, strategy='bottom_up'):
         edata = self.edata
         adata = self.adata
@@ -708,12 +708,12 @@ class SNIEE():
                 fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_{len(relations)}{test_type}s_{survival.upper()}_surv.png'
                 print_msg(f'[Output] The survival plot are saved to:\n{fn}')
 
-
+    
 class SNIEETime(SNIEE):
 
     def __init__(self, adata, **kwargs):
         super().__init__(adata, class_type='time', **kwargs)
-
+        
 
     # SNIEETime
     def calculate_entropy(self, ref_obs, per_obss, groupby, ref_time, layer='log1p'):
@@ -918,7 +918,7 @@ class SNIEETime(SNIEE):
         trend_list = []
         for relation in relations:
             if relation not in self.edata.var_names:
-                continue
+                continue            
             layer = f'{self.ref_time}_{method}_entropy'
             trend_res = self._test_trend(relation, edata, layer, p_cutoff=p_cutoff)
             is_trend = trend_res['trend'] != 'no trend'
@@ -1020,7 +1020,7 @@ class SNIEEGroup(SNIEE):
             raise KeyError(f'{groupby} not in adata.obs.')
         if method != 'prod':
             raise KeyError(f'method "{method}" should be "prod".')
-
+        
         groups = adata.obs[groupby].unique()
         self.groups = groups
         print('cluster groups', len(groups))
@@ -1076,7 +1076,7 @@ class SNIEEGroup(SNIEE):
                 for ref_group in groups:
                     if ref_group == per_group:
                         continue
-                    layer = f'{ref_group}_{method}_entropy'
+                    layer = f'{ref_group}_{method}_entropy' 
                     ref_edata = edata[edata.obs[self.groupby] == ref_group, :]
                     zero_res = self._test_zero_trend(relation, ref_edata, layer)
                     is_ref_zero = zero_res['p_value'] < p_cutoff
@@ -1088,7 +1088,7 @@ class SNIEEGroup(SNIEE):
                     trend_list.append(zero_res)
                 if all(is_TER):
                     filtered_relations.append(relation)
-
+                    
             print(f'{method}_{self.groupby}_{per_group}', 'DER', len(relations), 'TER', len(filtered_relations))
             edata.uns[f'{method}_{self.groupby}_{per_group}_TER'] = list(filtered_relations)
 
@@ -1133,17 +1133,17 @@ class SNIEETimeGroup(SNIEETime):
             if ref_as_per:
                 per_obss = [[x] for x in adata.obs_names]
             else:
-                per_obss = [[x] for x in adata[adata.obs[tgroupby] != ref_time].obs_names]
+                per_obss = [[x] for x in adata[adata.obs[tgroupby] != ref_time].obs_names]           
             print('group', group, 'reference observations', len(ref_obs))
             print('group', group, 'perputation groups', len(per_obss))
 
             self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby]+headers)
-
+            
             if 'prod' in self.relation_methods:
                 self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
             else:
                 self._calculate_entropy(ref_obs, per_obss)
-
+            
             edata = self.edata
             edata_list.append(edata)
 
@@ -1168,17 +1168,17 @@ class SNIEEGroupTime(SNIEETime):
             if ref_as_per:
                 per_obss = [[x] for x in adata.obs_names]
             else:
-                per_obss = [[x] for x in adata[adata.obs[groupby] != ref_group].obs_names]
+                per_obss = [[x] for x in adata[adata.obs[groupby] != ref_group].obs_names]           
             print('tgroup', tgroup, 'reference observations', len(ref_obs))
             print('tgroup', tgroup, 'perputation groups', len(per_obss))
 
             self.init_edata(per_obss, headers=['test', 'subject', tgroupby, groupby]+headers)
-
+            
             if 'prod' in self.relation_methods:
                 self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
             else:
                 self._calculate_entropy(ref_obs, per_obss)
-
+            
             edata = self.edata
             edata_list.append(edata)
 
