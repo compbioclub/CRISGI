@@ -72,7 +72,7 @@ def get_relation_score(sniee_obj, per_group, groupby=None, relations=None,
         t_is = [time2i[t] for t in sedata.obs['time']]
         X = np.empty((len(relations), len(times)))
         X[:] = np.nan
-        X[:, t_is] = sedata[:, relations].layers[f'{method}_entropy'].T
+        X[:, t_is] = sedata[:, relations].layers[f'{sniee_obj.ref_time}_{method}_entropy'].T
         df = pd.DataFrame(X, columns=times, index=relations)
         if out_dir is None:
             out_dir = sniee_obj.out_dir
