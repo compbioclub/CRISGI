@@ -25,11 +25,9 @@ def relation_score_line(sniee_obj, per_group=None,
             myrelations = edata.uns[key]
         else:
             myrelations = [x for x in relations if x in edata.var_names]
-        print(relations)
         df['avg(score)'] = edata[:, myrelations].layers[f'{sniee_obj.ref_time}_{method}_entropy'].mean(axis=1)
 
         if unit_header is not None:
-            print(df)
             sns.lineplot(df, x='time', y='avg(score)', hue=sniee_obj.groupby, 
                         units=unit_header, estimator=None,
                         ax=ax)

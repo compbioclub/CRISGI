@@ -302,6 +302,7 @@ class SNIEE():
                 edata_layer_ref = self.ref_time
             else:
                 edata_layer_ref = ref_group
+            print('ref_group', ref_group)
             sc.tl.rank_genes_groups(edata, layer=f'{edata_layer_ref}_{method}_entropy',
                                         groupby=groupby, reference=ref_group,
                                         method=test_method)
@@ -756,7 +757,7 @@ class SNIEETime(SNIEE):
         bg_net = adata.varm['bg_net']
         row, col = bg_net.nonzero()
 
-        ref_obs_is = adata[ref_obs, :].obs.i.tolist()
+        ref_obs_is = adata.obs[adata.obs.index.isin(ref_obs)].i.tolist()
         ref_n = len(ref_obs_is)
         per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
         X = get_array(adata, layer=layer)
