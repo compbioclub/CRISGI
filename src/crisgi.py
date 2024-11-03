@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -447,7 +446,7 @@ class SNIEE():
         self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_df'] = df
 
     # SNIEE
-    def prerank_enrich_gene(self, sortby='pvals_adj', n_top_relations=None,
+    def prerank_enrich_gene(self, ref_group, per_group, sortby='pvals_adj', n_top_relations=None,
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'], 
@@ -461,7 +460,10 @@ class SNIEE():
         if n_top_relations < 1:
             n_top_relations = 1
                 
-        df = self.edata.uns['rank_genes_groups_df'][0:n_top_relations]
+        df = self.edata.uns['rank_genes_groups_df']
+        df = df[(df['ref_group'] == ref_group) & (df['per_group'] == per_group)]
+        df = df.sort_values(by=[sortby], ascending=False)
+        df = df[0:n_top_relations]
         df = df[['names', sortby]]
         df['gene1'] = df['names'].apply(lambda x: x.split('_')[0])
         df['gene2'] = df['names'].apply(lambda x: x.split('_')[1])
@@ -480,7 +482,7 @@ class SNIEE():
                          threads=self.n_threads,
                          min_size=min_size, max_size=max_size,
                          permutation_num=permutation_num,
-                         outdir=f'{self.out_dir}/{prefix}',
+                         outdir=f'{self.out_dir}/{prefix}_{ref_group}_{per_group}',
                          seed=seed,
                          verbose=True
                          )
@@ -489,8 +491,8 @@ class SNIEE():
         for term in res.results.keys():
             rank_df[f'{term} hits'] = [1 if x in res.results[term]['hits'] else 0 for x in rank_df.index]
             rank_df[f'{term} RES'] = res.results[term]['RES']
-            # gseaplot(rank_metric=res.ranking, term=term, ofname=f'{self.out_dir}/{prefix}/{term}.pdf', **res.results[term])
-        rank_df.to_csv(f'{self.out_dir}/{prefix}/rank.csv')
+            # gseaplot(rank_metric=res.ranking, term=term, ofname=f'{self.out_dir}/{prefix}_{ref_group}_{per_group}/{term}.pdf', **res.results[term])
+        rank_df.to_csv(f'{self.out_dir}/{prefix}_{ref_group}_{per_group}/rank.csv')
         
     
     # SNIEE
@@ -560,6 +562,7 @@ class SNIEE():
 
         edata.obs[f'top_{top_n}_overlap'] = overlap_stats
         edata.obs[f'top_{top_n}_overlap_ratio'] = np.array(overlap_stats) / top_n
+        pd.DataFrame(edata.obs).to_csv(f'./{out_dir}/top_{top_n}_overlap.csv')
 
     # SNIEE
     def find_relation_module(self, per_group, layer='log1p',
@@ -628,6 +631,7 @@ class SNIEE():
                           'module':seat.clubs})
 
         df.index = df.relation
+        df = df.drop(columns=['relation'])
         fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myrelations)}_relation_community_module.csv'
         df.to_csv(fn)
         print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myrelations)} relation community & module are saved to:\n{fn}')
