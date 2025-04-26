@@ -1,0 +1,19 @@
+site_name: CRISGI
+site_url: https://compbioclub.github.io/CRISGI
+theme:
+  name: "material"
+
+nav:
+  - 🏠 Home: index.md
+  - installation.md
+  - usage.md
+  - 📖 Tutorial: 
+      - tutorial.md
+      - tutorial/gse30550.md
+      - tutorial/covid.md
+  - 📚 API:
+      - api_reference.md
+      - api/adata.md
+      - api/edata.md
+      - api/test_DER.md
+

@@ -4,7 +4,7 @@ Welcome to the official documentation of Charting CRItical tranSient Gene Intera
 
 ## 🗺️ Overview
 
-![Figure1](./docs/figure/Figure1.png)
+![Figure1](./figure/Figure1.png)
 
 Critical transitions (CTs) in gene regulatory networks (GRNs) drive pivotal shifts in disease progression. While CT theory holds great promise for early disease detection, existing computational frameworks face major limitations. They rely on unsupervised ranking of CT signals at individual gene or gene-module level, apply unranked gene set enrichment analyses, and depend on manual inspection of signal trends to infer CT presence and onset within a single cohort. Additionally, multimodal transcriptomic data remain underutilized. These approaches limit mechanistic resolution and hinder clinical translation.
 
@@ -18,25 +18,25 @@ Together, CRISGI bridges mechanistic insight and translational potential, enabli
 
 ## 🚀 Getting Started
 
-Want to start using it immediately? Check out the [Installation Guide](https://compbioclub.github.io/CRISGI/installation/) and [Usage Guide](https://compbioclub.github.io/CRISGI/usage/).
+Want to start using it immediately? Check out the [Installation Guide](installation.md) and [Usage Guide](usage.md).
 
 ### 📥 Installation
 
 CRISGI is a Python package that can be installed via pip. You can install it from PyPI or from the source.
 
-Details on how to install CRISGI can be found in the [Installation](https://compbioclub.github.io/CRISGI/installation/) section.
+Details on how to install CRISGI can be found in the [Installation](installation.md) section.
 
 ### 🔧 Usage
 
-CRISGI is designed to be user-friendly and easy to use. The package provides a set of functions that can be used to perform various tasks related to critical transitions in gene interactions. Detailed instructions on how to use CRISGI can be found in the [Usage](https://compbioclub.github.io/CRISGI/usage/) section.
+CRISGI is designed to be user-friendly and easy to use. The package provides a set of functions that can be used to perform various tasks related to critical transitions in gene interactions. Detailed instructions on how to use CRISGI can be found in the [Usage](usage.md) section.
 
 ### 📖 Tutorials
 
-Moreover, you can find some tutorials in the [Tutorial](https://compbioclub.github.io/CRISGI/tutorial/) section. These tutorials will guide you through the process of using CRISGI for your own data analysis.
+Moreover, you can find some tutorials in the [Tutorial](tutorial.md) section. These tutorials will guide you through the process of using CRISGI for your own data analysis.
 
 ## 📚 API Reference
 
-For more detailed information, please refer to the [API Reference](https://compbioclub.github.io/CRISGI/api_reference/).
+For more detailed information, please refer to the [API Reference](api_reference.md).
 
 ## 📑 Citation
 
