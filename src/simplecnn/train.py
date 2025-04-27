@@ -1,4 +1,6 @@
-from src.cnn.evalution_metrics import calculate_pred_metric
+from src.simplecnn.evalution_metrics import calculate_pred_metric
+from sklearn.linear_model import LogisticRegression
+import numpy as np
 
 
 def train(ae, mlp, train_loader, AE_loss_function, CE_loss_function, optimizer, device):
@@ -11,8 +13,8 @@ def train(ae, mlp, train_loader, AE_loss_function, CE_loss_function, optimizer, 
     all_labels = []
 
     for x, y in train_loader:
-        x = x.to(device)
-        y = y.to(device)
+        x= x.to(device)
+        y= y.to(device)
         optimizer.zero_grad()
         en, de = ae(x)
         classification_res = mlp(en)
@@ -40,3 +42,4 @@ def train(ae, mlp, train_loader, AE_loss_function, CE_loss_function, optimizer, 
     metrics = calculate_pred_metric(all_labels, all_predictions)
 
     return metrics
+

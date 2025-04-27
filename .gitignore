@@ -5,4 +5,5 @@ data
 .DS_Store
 *.png
 *.html
-
+.vscode
+out
