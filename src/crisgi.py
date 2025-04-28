@@ -404,6 +404,40 @@ class CRISGI():
                't_statistic': t_statistic, 'p_value': p_value}
         return res
 
+    def Cohort_level_top_n_ORA(self,n_top_relations=None, n_space=10,method='pearson',gene_sets=['KEGG_2021_Human',
+                                      'GO_Molecular_Function_2023', 
+                                      'GO_Cellular_Component_2023', 
+                                      'GO_Biological_Process_2023',
+                                      'MSigDB_Hallmark_2020'],
+                           background=None,
+                           organism='human', plot=True):
+        df = self.edata.to_df()
+        relation_score_sum = df.sum(axis=0).to_dict()
+        relation_list = list(relation_score_sum.keys())
+        enr_dict = {}
+        df_list = []
+
+        if n_top_relations is None:
+            n_top_relations = len(relation_list)
+
+        for top_n in range(10, n_top_relations + 1, n_space):
+            try:
+                top_n, enr, enrich_df = self._enrich_for_top_n(top_n, relation_list, gene_sets, organism, background)
+                enr_dict[top_n] = enr
+                df_list.append(enrich_df)
+            except Exception as exc:
+                print(f'Top_n {top_n} generated an exception: {exc}')
+
+        final_df = pd.concat(df_list)
+        fn = f'{self.out_dir}/{method}_cohort_enrich.csv'
+        final_df.to_csv(fn, index=False)
+
+        print_msg(f'[Output] The {method} cohort-level enrich statistics are saved to:\n{fn}')
+    
+        self.edata.uns[f'{method}_cohort_enrich_res'] = enr_dict
+        self.edata.uns[f'{method}_cohort_enrich_df'] = final_df
+                
+
     # CRISGI
     def _enrich_for_top_n(self, top_n, relation_list, gene_sets, organism, background):
         print('_enrich_for_top_n', top_n)
@@ -752,7 +786,14 @@ class CRISGI():
         """
         edata = self.edata
 
-        symp_edata = edata[edata.obs['symptom'].isin(symptom_types)]
+        mask = edata.obs['symptom'].isin(["Symptomatic"])
+
+        symp_edata = ad.AnnData(
+            X=edata.X[mask],
+            obs=edata.obs.loc[mask].copy(),
+            var=edata.var.copy(),
+            layers={k: v[mask] for k, v in edata.layers.items()}  # 只拷贝layers
+        )
 
         for sample in symp_edata.obs['subject'].unique():
             sample_edata = symp_edata[symp_edata.obs['subject'] == sample]
