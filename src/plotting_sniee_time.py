@@ -8,9 +8,9 @@ import src.plotting as pl
 from src.util import print_msg
 
 
-def relation_score_line(sniee_obj, per_group=None, 
+def interaction_score_line(sniee_obj, per_group=None, 
                         method='pearson', test_type='TER', 
-                        relations=None, unit_header='subject',
+                        interactions=None, unit_header='subject',
                    title='', out_prefix='test',
                    ax=None):
     edata = sniee_obj.edata
@@ -19,14 +19,14 @@ def relation_score_line(sniee_obj, per_group=None,
         if myper_group is not None and per_group != myper_group:
             continue
         df = edata.obs.copy()
-        if relations is None:
+        if interactions is None:
             key = f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}'
             print(key)
-            myrelations = edata.uns[key]
+            myinteractions = edata.uns[key]
         else:
-            myrelations = [x for x in relations if x in edata.var_names]
-        print(relations)
-        df['avg(score)'] = edata[:, myrelations].layers[f'{sniee_obj.ref_time}_{method}_entropy'].mean(axis=1)
+            myinteractions = [x for x in interactions if x in edata.var_names]
+        print(interactions)
+        df['avg(score)'] = edata[:, myinteractions].layers[f'{sniee_obj.ref_time}_{method}_entropy'].mean(axis=1)
 
         if unit_header is not None:
             print(df)
@@ -37,18 +37,18 @@ def relation_score_line(sniee_obj, per_group=None,
             sns.lineplot(df, x='time', y='avg(score)', hue=sniee_obj.groupby, 
                         ax=ax)
                     
-        mytitle = title + f'{sniee_obj.dataset} per {per_group}\n{method} entropy score of {len(myrelations)} {test_type}s '
+        mytitle = title + f'{sniee_obj.dataset} per {per_group}\n{method} entropy score of {len(myinteractions)} {test_type}s '
         if ax is not None:
             ax.set_title(mytitle)
         elif out_prefix:
             plt.title(mytitle)
-            plt.savefig(f'{out_prefix}_{mytitle}_relation_score.png'.replace('\n', ' '))
+            plt.savefig(f'{out_prefix}_{mytitle}_interaction_score.png'.replace('\n', ' '))
             plt.show()
         else:
             plt.title(mytitle)
             plt.show()
 
-def get_relation_score(sniee_obj, per_group, groupby=None, relations=None, 
+def get_interaction_score(sniee_obj, per_group, groupby=None, interactions=None, 
                        method='pearson', test_type='TER',
                         subject_header='subject',
                         out_dir=None):
@@ -57,10 +57,10 @@ def get_relation_score(sniee_obj, per_group, groupby=None, relations=None,
     if groupby is None:
         groupby = sniee_obj.groupby
 
-    if relations is None:
-        relations = edata.uns[f'{method}_{groupby}_{per_group}_{test_type}']
+    if interactions is None:
+        interactions = edata.uns[f'{method}_{groupby}_{per_group}_{test_type}']
     else:
-        relations = [x for x in relations if x in edata.var_names]
+        interactions = [x for x in interactions if x in edata.var_names]
 
     subjects = edata.obs[subject_header].unique()
     times = np.sort(edata.obs['time'].unique())
@@ -70,22 +70,22 @@ def get_relation_score(sniee_obj, per_group, groupby=None, relations=None,
         sedata = edata[edata.obs[subject_header] == subject]
 
         t_is = [time2i[t] for t in sedata.obs['time']]
-        X = np.empty((len(relations), len(times)))
+        X = np.empty((len(interactions), len(times)))
         X[:] = np.nan
-        X[:, t_is] = sedata[:, relations].layers[f'{sniee_obj.ref_time}_{method}_entropy'].T
-        df = pd.DataFrame(X, columns=times, index=relations)
+        X[:, t_is] = sedata[:, interactions].layers[f'{sniee_obj.ref_time}_{method}_entropy'].T
+        df = pd.DataFrame(X, columns=times, index=interactions)
         if out_dir is None:
             out_dir = sniee_obj.out_dir
-        fn = f'{out_dir}/{subject}_{method}_{groupby}_{per_group}_{test_type}{len(relations)}_relation_score.csv'
+        fn = f'{out_dir}/{subject}_{method}_{groupby}_{per_group}_{test_type}{len(interactions)}_interaction_score.csv'
         df.to_csv(fn)
-        print_msg(f'[Output] The subject {subject} {method} {groupby} {per_group} {test_type}{len(relations)} entropy scores are saved to:\n{fn}')
+        print_msg(f'[Output] The subject {subject} {method} {groupby} {per_group} {test_type}{len(interactions)} entropy scores are saved to:\n{fn}')
 
         #sns.heatmap(df, cmap='RdYlBu_r', robust=True)
         #plt.title(f'delta entropy score for subject {subject}')
         #plt.show()
 
 
-def generate_relation_score_images(folder_path, output_path, robust=False, scale=False,
+def generate_interaction_score_images(folder_path, output_path, robust=False, scale=False,
                               rep_n=10, random_seed=0,
                               figsize=(5,5), dpi=500):
     """
@@ -96,7 +96,7 @@ def generate_relation_score_images(folder_path, output_path, robust=False, scale
     scale (bool): If True, scale all heatmaps to the same color range. Default is False.
     """
     # Get all CSV file names in the folder
-    csv_files = [f for f in os.listdir(folder_path) if f.endswith('relation_score.csv')]
+    csv_files = [f for f in os.listdir(folder_path) if f.endswith('interaction_score.csv')]
 
     if scale:
         # Initialize variables to store global min and max values
@@ -150,29 +150,29 @@ def generate_relation_score_images(folder_path, output_path, robust=False, scale
             # Save the heatmap as a PNG file with a transparent background
             output_file = os.path.join(output_path, os.path.splitext(file_name)[0] + f'_rep{i}.png')
             plt.savefig(output_file, transparent=True, bbox_inches='tight', pad_inches=0, dpi=dpi)
-            print_msg(f'[Output] The relation score image is saved to:\n{output_file}')
+            print_msg(f'[Output] The interaction score image is saved to:\n{output_file}')
 
             plt.close()
 
 
-def plot_relation(obj, per_group=None, 
+def plot_interaction(obj, per_group=None, 
                   layer='log1p',
                   method='pearson', test_type='TER', 
-                  relations=None, subject_header='subject',
+                  interactions=None, subject_header='subject',
                    title='', out_prefix='test',
                    ax=None):
     edata = obj.edata
     adata = obj.adata
     myper_group = per_group
 
-    if relations is None:
+    if interactions is None:
         key = f'{method}_{obj.groupby}_{per_group}_{test_type}'
-        myrelations = edata.uns[key]
+        myinteractions = edata.uns[key]
     else:
-        myrelations = [x for x in relations if x in edata.var_names]
+        myinteractions = [x for x in interactions if x in edata.var_names]
 
-    genes1 = [x.split('_')[0] for x in myrelations]
-    genes2 = [x.split('_')[0] for x in myrelations]
+    genes1 = [x.split('_')[0] for x in myinteractions]
+    genes2 = [x.split('_')[0] for x in myinteractions]
 
     subjects = edata.obs[subject_header].unique()
     times = np.sort(edata.obs['time'].unique())
@@ -191,13 +191,13 @@ def plot_relation(obj, per_group=None,
         
         X[:, t_is] = np.multiply(sub_adata[:, genes1].layers[layer], 
                                  sub_adata[:, genes2].layers[layer]).T
-        df = pd.DataFrame(X, columns=times, index=myrelations)
+        df = pd.DataFrame(X, columns=times, index=myinteractions)
         print(X)
         #if out_dir is None:
         #    out_dir = obj.out_dir
-        #fn = f'{out_dir}/{subject}_{method}_{obj.groupby}_{per_group}_{test_type}{len(relations)}_relation_score.csv'
+        #fn = f'{out_dir}/{subject}_{method}_{obj.groupby}_{per_group}_{test_type}{len(interactions)}_interaction_score.csv'
         #df.to_csv(fn)
-        #print_msg(f'[Output] The subject {subject} {method} {groupby} {per_group} {test_type}{len(relations)} entropy scores are saved to:\n{fn}')
+        #print_msg(f'[Output] The subject {subject} {method} {groupby} {per_group} {test_type}{len(interactions)} entropy scores are saved to:\n{fn}')
         sns.clustermap(df, col_cluster=False)
         plt.suptitle(f'Subject {subject}')
         plt.show()
@@ -209,3 +209,70 @@ def draw_gene_network(*args, **kwargs):
 
 def pathway_dynamic(*args, **kwargs):
     pl.pathway_dynamic(*args, **kwargs)
+
+
+
+def plot_interaction_score(obj,output_path='./out',label = False ,robust=False, scale=False,
+                              rep_n=10, random_seed=0,
+                              figsize=(5,5), dpi=500):
+    
+    edata = obj.edata
+
+    os.makedirs(output_path, exist_ok=True)
+
+    if scale:
+        # Initialize variables to store global min and max values
+        global_min = edata.X.min()
+        global_max = edata.X.max()
+        print(f"Global min: {global_min}, Global max: {global_max}")    
+
+    label_records = []
+
+    for sample in edata.obs['subject'].unique():
+        sample_edata = edata[edata.obs['subject'] == sample]
+        df = sample_edata.to_df()
+        df.index = sample_edata.obs['time'].values
+
+        df = df.dropna(how='all', axis=0)
+        df = df.dropna(how='all', axis=1)
+
+        if df.shape[0] * df.shape[1] == 0:
+            print("DataFrame is empty after dropping rows and columns.")
+
+        df = df.T
+
+        random.seed(random_seed)
+        for i in range(rep_n):
+            if i > 0:
+                df = df.sample(frac=1, random_state= random_seed)
+            # Create heatmap without displaying data values
+            plt.figure(figsize=figsize)
+            if scale:
+                heatmap = sns.heatmap(df.astype(float), annot=False, cmap='RdYlBu_r', cbar=False, robust=robust, vmin=global_min, vmax=global_max)
+            else:
+                heatmap = sns.heatmap(df.astype(float), annot=False, cmap='RdYlBu_r', cbar=False, robust=robust)
+            
+            heatmap.set_xticks([])
+            heatmap.set_yticks([])
+            heatmap.set_xlabel('')
+            heatmap.set_ylabel('')
+            
+            # Remove title
+            plt.title('')
+            
+            # Save the heatmap as a PNG file with a transparent background
+            output_file = os.path.join(output_path, f'{sample}_rep{i}.png')
+            plt.savefig(output_file, transparent=True, bbox_inches='tight', pad_inches=0, dpi=dpi)
+            # print_msg(f'[Output] The relation score image is saved to:\n{output_file}')
+
+            plt.close()
+
+            if label:
+                symptom = sample_edata.obs['symptom'].iloc[0]
+                label_records.append({'filename': f'{sample}_rep{i}.png', 'label': symptom})
+
+    if label:
+        label_df = pd.DataFrame(label_records)
+        label_csv_path = os.path.join(output_path, 'labels.csv')
+        label_df.to_csv(label_csv_path, index=False)
+        print(f"[Output] Labels saved to: {label_csv_path}")

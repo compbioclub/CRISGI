@@ -9,36 +9,36 @@ from src.util import set_adata_obs, print_msg
 
 
 
-def relation_score_boxplot(sniee_obj, groupby=None, 
-                           relation_type='common_TER',
+def interaction_score_boxplot(sniee_obj, groupby=None, 
+                           interaction_type='common_TER',
                            method='pearson',
                            title=''):
     edata = sniee_obj.edata
     df = edata.obs.copy()
-    df['score'] = edata[:, edata.uns[relation_type]].layers[f'{method}_entropy'].sum(axis=1)
+    df['score'] = edata[:, edata.uns[interaction_type]].layers[f'{method}_entropy'].sum(axis=1)
     if groupby is None:
         groupby = sniee_obj.groupby
     sns.lineplot(df, x='time', y='score', hue=groupby)
     plt.title(title)
     plt.show()
 
-def investigate_relation(sniee_obj, relation, groupby='group', 
+def investigate_interaction(sniee_obj, interaction, groupby='group', 
                          score_types=['entropy', 'prob', 'bg_net'],
                          figsize = (10, 12)):
     adata = sniee_obj.adata
     edata = sniee_obj.edata
-    methods = sniee_obj.relation_methods
+    methods = sniee_obj.interaction_methods
 
     nrow, ncol= len(score_types)*2+1, len(methods)
     if ncol < 3:
         ncol = 3
     fig = plt.figure(figsize=figsize)
-    fig.suptitle(relation)
+    fig.suptitle(interaction)
 
     sorted_samples = adata.obs.sort_values(by=[groupby, 'time']).index.tolist()
 
     header = 'log1p'
-    genes = relation.split('_')
+    genes = interaction.split('_')
     plt.subplot(nrow, ncol, 1)
     df = pd.DataFrame(adata[sorted_samples, genes].layers[header].T, index=genes)
     sns.heatmap(df, cmap='coolwarm')
@@ -62,7 +62,7 @@ def investigate_relation(sniee_obj, relation, groupby='group',
 
 
     for i, method in enumerate(methods):
-        sedata = edata[:, relation]
+        sedata = edata[:, interaction]
 
         for j, score_type in enumerate(score_types):
             header = f'{method}_{score_type}'
@@ -76,7 +76,7 @@ def investigate_relation(sniee_obj, relation, groupby='group',
             n += ncol
             plt.subplot(nrow, ncol, n)
             sns.lineplot(sedata.obs, x='time', y=header, hue=groupby, legend=False)
-            #sns.lineplot(sedata.obs, x='time', y=relation, units='Sample', hue=groupby, estimator=None)
+            #sns.lineplot(sedata.obs, x='time', y=interaction, units='Sample', hue=groupby, estimator=None)
 
 
     plt.tight_layout()
@@ -84,7 +84,7 @@ def investigate_relation(sniee_obj, relation, groupby='group',
 
 
 def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
-                    p_adjust=True, p_cutoff=0.05, n_top_pathway=10, n_top_relations=500,
+                    p_adjust=True, p_cutoff=0.05, n_top_pathway=10, n_top_interactions=500,
                     # Available options for piority_term: None, list of terms(specific pathway names)
                     piority_term=None,
                     # Available options for eval_para: 'top_n_ratio', 'overlap_ratio, 'P-value', 'Adjusted P-value', 'Odds Ratio', 'Combined Score', '-logP'
@@ -96,7 +96,7 @@ def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
         df = df[df["Adjusted P-value"] < p_cutoff]
     else:
         df = df[df["P-value"] < p_cutoff]
-    df = df[df["top_n"] <= n_top_relations]
+    df = df[df["top_n"] <= n_top_interactions]
     
     df["overlap_ratio"] = df["Overlap"].apply(
     lambda x: float(x.split("/")[0]) / float(x.split("/")[1])
@@ -175,7 +175,7 @@ def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
         
 def draw_gene_network(sniee_obj, per_group,
                       method='pearson', test_type='TER',
-                      n_top_relations=100, rdf=None,
+                      n_top_interactions=100, rdf=None,
                     cmap='viridis'):
     net = Network(notebook=True, height='1000px', width='1000px', cdn_resources='in_line')
     print(sniee_obj.edata)
@@ -188,32 +188,32 @@ def draw_gene_network(sniee_obj, per_group,
     gene2modules = rdf['module'].to_dict()
     gene2logfoldchanges = df['logfoldchanges'].to_dict()
     
-    relation_list = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}'][:n_top_relations]
+    interaction_list = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}'][:n_top_interactions]
 
     label = rdf['module'].unique()
     label_colors = dict(zip(set(label), sns.color_palette(cmap, len(set(label)))))
 
-    for relation in relation_list:
-        gene1, gene2 = relation.split('_')
+    for interaction in interaction_list:
+        gene1, gene2 = interaction.split('_')
 
         net.add_node(gene1, label=gene1, font={'size': 30}, 
                      size=5, borderWidth=1, color='gray', borderColor='gray')
         net.add_node(gene2, label=gene2, font={'size': 30}, 
                      size=5, borderWidth=1, color='gray', borderColor='gray')        
 
-        score = gene2scores[relation]
-        module = gene2modules[relation]
+        score = gene2scores[interaction]
+        module = gene2modules[interaction]
         rbga_color = label_colors[module]
         hex_color = mcolors.rgb2hex(rbga_color)
-        title = f'scores: {gene2scores[relation]:.2f}\n'
-        title += f'logfoldchanges: {gene2logfoldchanges[relation]:.2f}\n'
-        title += f'pvals: {gene2pvals[relation]:.2f}\n'
-        title += f'pvals_adj: {gene2pvals_adj[relation]:.2f}\n'
+        title = f'scores: {gene2scores[interaction]:.2f}\n'
+        title += f'logfoldchanges: {gene2logfoldchanges[interaction]:.2f}\n'
+        title += f'pvals: {gene2pvals[interaction]:.2f}\n'
+        title += f'pvals_adj: {gene2pvals_adj[interaction]:.2f}\n'
         net.add_edge(gene1, gene2, value=score, 
                      title=title, 
                      color=hex_color)
 
-    html_fn = f'{sniee_obj.out_dir}/{method}_{test_type}{len(relation_list)}_gene_network.html'
-    print_msg(f'[Output] Relation network has saved to:\n{html_fn}')
+    html_fn = f'{sniee_obj.out_dir}/{method}_{test_type}{len(interaction_list)}_gene_network.html'
+    print_msg(f'[Output] interaction network has saved to:\n{html_fn}')
 
     net.show(html_fn)

@@ -76,4 +76,4 @@ class ImageDataset(Dataset):
             label = self.label_map[label_str]
             return image, label
         else:
-            return image, None
+            return image, []

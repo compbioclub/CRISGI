@@ -29,9 +29,9 @@ class LogisticModel:
     def save(self, path):
         if self.model is None:
             raise ValueError("No model to save.")
-        joblib.dump(self.model, path)
+        torch.save(self.model, path)
         print(f"✅ Logistic model saved to: {path}")
 
     def load(self, path):
-        self.model = joblib.load(path)
+        self.model = torch.load(path,map_location='cpu',weights_only=False)
         print(f"✅ Logistic model loaded from: {path}")
