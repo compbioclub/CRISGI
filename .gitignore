@@ -7,3 +7,5 @@ data
 *.html
 .vscode
 out
+build
+*.egg-info
