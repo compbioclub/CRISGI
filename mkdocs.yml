@@ -5,15 +5,32 @@ theme:
 
 nav:
   - 🏠 Home: index.md
-  - installation.md
-  - usage.md
+  - 📥 Installation: installation.md
   - 📖 Tutorial: 
       - tutorial.md
       - tutorial/gse30550.md
       - tutorial/covid.md
   - 📚 API:
       - api_reference.md
-      - api/adata.md
-      - api/edata.md
+      - api/calculate_entropy.md
+      - api/check_common_diff.md
+      - api/cohort_level_top_n_ORA.md
+      - api/crisgi_init.md
+      - api/crisgitime_init.md
+      - api/detect_startpoint.md
+      - api/find_interaction_module.md
+      - api/get_DER.md
+      - api/init.md
+      - api/init_edata.md
+      - api/load_crisgi.md
+      - api/obs_level_CT_rank.md
+      - api/pheno_level_CT_rank.md
+      - api/pheno_level_accumulated_top_n_ORA.md
+      - api/pl.interaction_score_line.md
+      - api/pl.pheno_level_accumulated_top_n_ORA.md
+      - api/save.md
+      - api/survival_analysis.md
       - api/test_DER.md
-
+      - api/test_TER.md
+      - api/test_val_trend_entropy.md
+      - api/train_predict.md
