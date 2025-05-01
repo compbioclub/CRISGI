@@ -9,25 +9,25 @@ from crisgi.util import set_adata_obs, print_msg
 
 
 
-def interaction_score_boxplot(sniee_obj, groupby=None, 
+def interaction_score_boxplot(crisgi_obj, groupby=None, 
                            interaction_type='common_TER',
                            method='pearson',
                            title=''):
-    edata = sniee_obj.edata
+    edata = crisgi_obj.edata
     df = edata.obs.copy()
     df['score'] = edata[:, edata.uns[interaction_type]].layers[f'{method}_entropy'].sum(axis=1)
     if groupby is None:
-        groupby = sniee_obj.groupby
+        groupby = crisgi_obj.groupby
     sns.lineplot(df, x='time', y='score', hue=groupby)
     plt.title(title)
     plt.show()
 
-def investigate_interaction(sniee_obj, interaction, groupby='group', 
+def investigate_interaction(crisgi_obj, interaction, groupby='group', 
                          score_types=['entropy', 'prob', 'bg_net'],
                          figsize = (10, 12)):
-    adata = sniee_obj.adata
-    edata = sniee_obj.edata
-    methods = sniee_obj.interaction_methods
+    adata = crisgi_obj.adata
+    edata = crisgi_obj.edata
+    methods = crisgi_obj.interaction_methods
 
     nrow, ncol= len(score_types)*2+1, len(methods)
     if ncol < 3:
@@ -83,14 +83,14 @@ def investigate_interaction(sniee_obj, interaction, groupby='group',
     plt.show()
 
 
-def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
+def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="pearson", test_type="TER",
                     p_adjust=True, p_cutoff=0.05, n_top_pathway=10, n_top_interactions=500,
                     # Available options for piority_term: None, list of terms(specific pathway names)
                     piority_term=None,
                     # Available options for eval_para: 'top_n_ratio', 'overlap_ratio, 'P-value', 'Adjusted P-value', 'Odds Ratio', 'Combined Score', '-logP'
                     eval_para='top_n_ratio',
                     dataset_name=None,):
-    df = sniee_obj.edata.uns[f"{method}_{sniee_obj.groupby}_{per_group}_{test_type}_enrich_df"]
+    df = crisgi_obj.edata.uns[f"{method}_{crisgi_obj.groupby}_{target_group}_{test_type}_enrich_df"]
 
     if p_adjust:
         df = df[df["Adjusted P-value"] < p_cutoff]
@@ -166,20 +166,20 @@ def pathway_dynamic(sniee_obj, per_group,method="pearson", test_type="TER",
         tmp.drop(columns='rank', inplace=True)
         
         sns.heatmap(tmp, yticklabels=1)
-        plt.title(f"{dataset_name}_{method}_{sniee_obj.groupby}_{per_group}_{test_type}s\n" + f"{gene_set} with {eval_para}")
-        fn = f"{sniee_obj.out_dir}/{method}_{sniee_obj.groupby}_{per_group}_{test_type}_{gene_set}_{eval_para}_enrich_top_n.png"
+        plt.title(f"{dataset_name}_{method}_{crisgi_obj.groupby}_{target_group}_{test_type}s\n" + f"{gene_set} with {eval_para}")
+        fn = f"{crisgi_obj.out_dir}/{method}_{crisgi_obj.groupby}_{target_group}_{test_type}_{gene_set}_{eval_para}_enrich_top_n.png"
         plt.savefig(fn,dpi=300,format='png',bbox_inches='tight')
-        print_msg(f"[Output] The {method} {sniee_obj.groupby} {per_group} {test_type} {gene_set} {eval_para} top_n enrichment is saved to:\n{fn}")
+        print_msg(f"[Output] The {method} {crisgi_obj.groupby} {target_group} {test_type} {gene_set} {eval_para} top_n enrichment is saved to:\n{fn}")
         plt.show()
 
         
-def draw_gene_network(sniee_obj, per_group,
+def draw_gene_network(crisgi_obj, target_group,
                       method='pearson', test_type='TER',
                       n_top_interactions=100, rdf=None,
                     cmap='viridis'):
     net = Network(notebook=True, height='1000px', width='1000px', cdn_resources='in_line')
-    print(sniee_obj.edata)
-    df = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_DER_df']
+    print(crisgi_obj.edata)
+    df = crisgi_obj.edata.uns[f'{method}_{crisgi_obj.groupby}_{target_group}_DER_df']
     df = df[(df.method == method) & df['DER']]
     df.index = df.names
     gene2pvals_adj = df['pvals_adj'].to_dict()
@@ -188,7 +188,7 @@ def draw_gene_network(sniee_obj, per_group,
     gene2modules = rdf['module'].to_dict()
     gene2logfoldchanges = df['logfoldchanges'].to_dict()
     
-    interaction_list = sniee_obj.edata.uns[f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}'][:n_top_interactions]
+    interaction_list = crisgi_obj.edata.uns[f'{method}_{crisgi_obj.groupby}_{target_group}_{test_type}'][:n_top_interactions]
 
     label = rdf['module'].unique()
     label_colors = dict(zip(set(label), sns.color_palette(cmap, len(set(label)))))
@@ -213,7 +213,7 @@ def draw_gene_network(sniee_obj, per_group,
                      title=title, 
                      color=hex_color)
 
-    html_fn = f'{sniee_obj.out_dir}/{method}_{test_type}{len(interaction_list)}_gene_network.html'
+    html_fn = f'{crisgi_obj.out_dir}/{method}_{test_type}{len(interaction_list)}_gene_network.html'
     print_msg(f'[Output] interaction network has saved to:\n{html_fn}')
 
     net.show(html_fn)

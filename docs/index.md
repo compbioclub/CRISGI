@@ -18,7 +18,7 @@ Together, CRISGI bridges mechanistic insight and translational potential, enabli
 
 ## 🚀 Getting Started
 
-Want to start using it immediately? Check out the [Installation Guide](installation.md) and [Usage Guide](usage.md).
+Want to start using it immediately? Check out the following sections:
 
 ### 📥 Installation
 
@@ -28,7 +28,7 @@ Details on how to install CRISGI can be found in the [Installation](installation
 
 ### 🔧 Usage
 
-CRISGI is designed to be user-friendly and easy to use. The package provides a set of functions that can be used to perform various tasks related to critical transitions in gene interactions. Detailed instructions on how to use CRISGI can be found in the [Usage](usage.md) section.
+CRISGI is designed to be user-friendly and easy to use. The package provides a set of functions that can be used to perform various tasks related to critical transitions in gene interactions.
 
 ### 📖 Tutorials
 
@@ -61,3 +61,5 @@ BibTeX format:
   publisher={Cold Spring Harbor Laboratory}
 }
 ```
+
+<script type='text/javascript' id='clustrmaps' src='//cdn.clustrmaps.com/map_v2.js?cl=ffffff&w=a&t=n&d=aehrmM5iUrNweGVMgYWen6iLrg21PDipO7L_XllJ1lo&co=2d78ad&cmo=3acc3a&cmn=ff5353&ct=ffffff'></script>

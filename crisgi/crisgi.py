@@ -31,6 +31,10 @@ pd.options.mode.copy_on_write = True
 from crisgi.util import print_msg, get_array, set_adata_var, set_adata_obs
 
 
+def load_crisgi(pk_fn):
+    crisgi_obj = pickle.load(open(pk_fn, 'rb'))
+    print_msg(f'[Input] CRISGI object stored at {pk_fn} has been loaded.')
+    return crisgi_obj
 
 class CRISGI():
 
@@ -219,6 +223,18 @@ class CRISGI():
                 for j, k in zip(row, col):
                     R[j, k] += X[i, j] * X[i, k]
         return R
+    
+    def _negprod(self, X, obs_is, row, col, obs_cutoff=100):
+        _, M = X.shape
+        if len(obs_is) > obs_cutoff:
+            X_tmp = X[obs_is, :]
+            R = np.dot(X_tmp.T, X_tmp.max() - X_tmp)
+        else:
+            R = np.zeros((M, M))
+            for i in obs_is:
+                for j, k in zip(row, col):
+                    R[j, k] += X[i, j] * (X_tmp[i, :].max() - X[i, k])
+        return R
 
     # CRISGI
     def sparseR2entropy(self, R, row, col):
@@ -281,7 +297,7 @@ class CRISGI():
         return R
 
     # CRISGI
-    def test_DER(self, groupby, target_group=None, test_method="wilcoxon", method='prod'):
+    def test_DER(self, groupby, target_group=None, test_method="wilcoxon", method='pos_coexp'):
         mytarget_group = target_group
         groups = self.adata.obs[groupby].unique()
         self.groups = groups
@@ -325,7 +341,7 @@ class CRISGI():
         return df
 
     #CRISGI
-    def get_DER(self, target_group=None, n_top_interactions=None, method='prod', 
+    def get_DER(self, target_group=None, n_top_interactions=None, method='pos_coexp', 
                 p_adjust=True, p_cutoff=0.05, fc_cutoff=1, sortby='scores',
                 ):
         mytarget_group = target_group
@@ -449,14 +465,14 @@ class CRISGI():
         return top_n, enr, df
 
     # CRISGI pathwau_enrich -> pheno_level_accumulated_top_n_ORA
-    def pheno_level_accumulated_top_n_ORA(self, per_group, n_top_interactions=None, n_space=10,
+    def pheno_level_accumulated_top_n_ORA(self, target_group, n_top_interactions=None, n_space=10,
                        method='pearson', test_type='TER',
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'],
                        background=None,
                        organism='human', plot=True):
-        interaction_list = self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}']
+        interaction_list = self.edata.uns[f'{method}_{self.groupby}_{target_group}_{test_type}']
         enr_dict = {}
         df_list = []
 
@@ -472,15 +488,15 @@ class CRISGI():
                 print(f'Top_n {top_n} generated an exception: {exc}')
 
         df = pd.concat(df_list)
-        fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_{test_type}_enrich.csv'
+        fn = f'{self.out_dir}/{method}_{self.groupby}_{target_group}_{test_type}_enrich.csv'
         df.to_csv(fn, index=False)
-        print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type} enrich statistics are saved to:\n{fn}')
+        print_msg(f'[Output] The {method} {self.groupby} {target_group} {test_type} enrich statistics are saved to:\n{fn}')
 
-        self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_res'] = enr_dict
-        self.edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}_enrich_df'] = df
+        self.edata.uns[f'{method}_{self.groupby}_{target_group}_{test_type}_enrich_res'] = enr_dict
+        self.edata.uns[f'{method}_{self.groupby}_{target_group}_{test_type}_enrich_df'] = df
 
     # CRISGI prerank_enrich_gene -> pheno_level_CT_rank
-    def pheno_level_CT_rank(self, ref_group, per_group, sortby='pvals_adj', n_top_interactions=None,
+    def pheno_level_CT_rank(self, ref_group, target_group, sortby='pvals_adj', n_top_interactions=None,
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'], 
@@ -495,7 +511,7 @@ class CRISGI():
             n_top_interactions = 1
                 
         df = self.edata.uns['rank_genes_groups_df']
-        df = df[(df['ref_group'] == ref_group) & (df['per_group'] == per_group)]
+        df = df[(df['ref_group'] == ref_group) & (df['target_group'] == target_group)]
         df = df.sort_values(by=[sortby], ascending=False)
         df = df[0:n_top_interactions]
         df = df[['names', sortby]]
@@ -516,7 +532,7 @@ class CRISGI():
                          threads=self.n_threads,
                          min_size=min_size, max_size=max_size,
                          permutation_num=permutation_num,
-                         outdir=f'{self.out_dir}/{prefix}_{ref_group}_{per_group}',
+                         outdir=f'{self.out_dir}/{prefix}_{ref_group}_{target_group}',
                          seed=seed,
                          verbose=True
                          )
@@ -525,8 +541,8 @@ class CRISGI():
         for term in res.results.keys():
             rank_df[f'{term} hits'] = [1 if x in res.results[term]['hits'] else 0 for x in rank_df.index]
             rank_df[f'{term} RES'] = res.results[term]['RES']
-            # gseaplot(rank_metric=res.ranking, term=term, ofname=f'{self.out_dir}/{prefix}_{ref_group}_{per_group}/{term}.pdf', **res.results[term])
-        rank_df.to_csv(f'{self.out_dir}/{prefix}_{ref_group}_{per_group}/rank.csv')
+            # gseaplot(rank_metric=res.ranking, term=term, ofname=f'{self.out_dir}/{prefix}_{ref_group}_{target_group}/{term}.pdf', **res.results[term])
+        rank_df.to_csv(f'{self.out_dir}/{prefix}_{ref_group}_{target_group}/rank.csv')
         
     
     # CRISGI prerank_gsva_interaction -> obs_level_CT_rank
@@ -564,7 +580,7 @@ class CRISGI():
     
     # CRISGI
     def check_common_diff(self, top_n, per_group, layer='log1p', 
-                          method='prod', test_type='TER', 
+                          method='pos_coexp', test_type='TER', 
                           interactions=None, unit_header='subject',
                           out_dir=None):
         edata = self.edata
@@ -600,7 +616,7 @@ class CRISGI():
 
     # CRISGI
     def find_interaction_module(self, per_group, layer='log1p',
-                          method='prod', test_type='TER', 
+                          method='pos_coexp', test_type='TER', 
                           interactions=None, unit_header='subject',
                           out_dir=None, label_df=None,
                           n_neighbors=10, strategy='bottom_up'):
@@ -677,7 +693,7 @@ class CRISGI():
         return df
 
     def network_analysis(self, per_group, layer='log1p',
-                          method='prod', test_type='TER', 
+                          method='pos_coexp', test_type='TER', 
                           interactions=None, unit_header='subject',
                           out_dir=None,    
                           n_neighbors=10, strategy='bottom_up'):
@@ -713,7 +729,7 @@ class CRISGI():
                         groupbys=[],
                         survival_types = ['os', 'pfs'],
                         time_unit = 'time',
-                        test_type='DER', method='prod',
+                        test_type='DER', method='pos_coexp',
                         title=''):
 
         edata = self.edata
@@ -833,7 +849,7 @@ class CRISGI():
     
 class CRISGITime(CRISGI):
 
-    def __init__(self, adata, device='cpu', model_type="cnn", ae_path=None, mlp_path=None, model_path=None, **kwargs,):
+    def __init__(self, adata, class_type='time',device='cpu', model_type="cnn", ae_path=None, mlp_path=None, model_path=None, **kwargs,):
         super().__init__(adata, class_type='time', **kwargs)
         self.device = device
         self.model = None
@@ -850,14 +866,15 @@ class CRISGITime(CRISGI):
         self.ref_time = ref_time
         self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby])
 
-        if 'prod' in self.interaction_methods:
+        if 'pos_coexp' in self.interaction_methods:
             self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
+        elif 'neg_coexp' in self.interaction_methods:
+            self._calculate_entropy_by_negprod(ref_obs, per_obss, layer=layer)
         else:
             self._calculate_entropy(ref_obs, per_obss)
 
     # CRISGITime
-    def _calculate_entropy_by_prod(self, ref_obs, per_obss, layer='log1p',
-                                   obs_cutoff=100):
+    def _calculate_entropy_by_prod(self, ref_obs, per_obss, layer='log1p', obs_cutoff=100):
         adata = self.adata
         edata = self.edata
 
@@ -890,8 +907,45 @@ class CRISGITime(CRISGI):
             delta_std = np.abs(per_interaction_std - ref_interaction_std)
             edata.X[per_i, :] = delta_entropy * delta_std
 
-        edata.layers[f'{self.ref_time}_prod_entropy'] = edata.X
+        edata.layers[f'{self.ref_time}_pos_coexp_entropy'] = edata.X
         self.edata = edata
+        
+    def _calculate_entropy_by_negprod(self, ref_obs, per_obss, layer='log1p', obs_cutoff=100):
+        adata = self.adata
+        edata = self.edata
+
+        bg_net = adata.varm['bg_net']
+        row, col = bg_net.nonzero()
+
+        ref_obs_is = adata[ref_obs, :].obs.i.tolist()
+        ref_n = len(ref_obs_is)
+        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
+        X = get_array(adata, layer=layer)
+        N, M = X.shape
+
+        gene_std = X[ref_obs_is].std(axis=0)
+        ref_interaction_std = (gene_std[row] + gene_std[col]) / 2
+
+        print_msg(f'---Calculating the entropy for reference group (negprod)')
+        ref_R_sum = self._negprod(X, ref_obs_is, row, col, obs_cutoff=obs_cutoff)
+        ref_R_sparse = csr_matrix((ref_R_sum[row, col] / ref_n, (row, col)), shape=(M, M))
+        ref_interaction_entropy = self.sparseR2entropy(ref_R_sparse, row, col)
+
+        for per_i, per_obs_is in enumerate(per_obss_is):
+            print_msg(f'---Calculating the entropy for pertutation group {per_i} (negprod), observations {len(per_obs_is)}')
+            R = self._negprod(X, per_obs_is, row, col, obs_cutoff=obs_cutoff)
+            R = csr_matrix(((R[row, col] + ref_R_sum[row, col]) / (ref_n + len(per_obs_is)), (row, col)), shape=(M, M))
+            per_interaction_entropy = self.sparseR2entropy(R, row, col)
+            delta_entropy = np.abs(per_interaction_entropy - ref_interaction_entropy)
+
+            gene_std = X[ref_obs_is + per_obs_is].std(axis=0)
+            per_interaction_std = (gene_std[row] + gene_std[col]) / 2
+            delta_std = np.abs(per_interaction_std - ref_interaction_std)
+            edata.X[per_i, :] = delta_entropy * delta_std
+
+        edata.layers[f'{self.ref_time}_neg_coexp_entropy'] = edata.X
+        self.edata = edata
+
 
     # CRISGITime
     def _calculate_entropy(self, ref_obs, per_obss):
@@ -997,7 +1051,7 @@ class CRISGITime(CRISGI):
             adata.varm[key] = csr_matrix((val, (row, col)), shape = adata.varm['bg_net'].shape)
 
     # CRISGITime
-    def test_TER(self, per_group=None, p_cutoff=0.05, method='prod', groups=None):
+    def test_TER(self, per_group=None, p_cutoff=0.05, method='pos_coexp', groups=None):
         myper_group = per_group
         edata = self.edata
 
@@ -1071,8 +1125,12 @@ class CRISGITime(CRISGI):
         return candidates
 
     # CRISGITime
-    def pathway_enrich(self, per_group, **kwargs):
-        super(CRISGITime, self).pathway_enrich(per_group=per_group, **kwargs)
+    def obs_level_CT_rank(self, gene_sets, **kwargs):
+        super(CRISGITime, self).obs_level_CT_rank(gene_sets=gene_sets, **kwargs)
+    def pheno_level_CT_rank(self, ref_group, target_group, **kwargs):
+        super(CRISGITime, self).pheno_level_CT_rank(ref_group=ref_group, target_group=target_group, **kwargs)
+    def pheno_level_accumulated_top_n_ORA(self, target_group, **kwargs):
+        super(CRISGITime, self).pheno_level_accumulated_top_n_ORA(target_group=target_group, **kwargs)
 
     def set_model_type(self, model_type, ae_path=None, mlp_path=None, model_path=None,device='cpu'):
         self.model_type = model_type

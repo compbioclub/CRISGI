@@ -22,7 +22,7 @@ Details on how to install CRISGI can be found in the [Installation](https://comp
 
 ### 🔧 Usage
 
-CRISGI is designed to be user-friendly and easy to use. The package provides a set of functions that can be used to perform various tasks related to critical transitions in gene interactions. Detailed instructions on how to use CRISGI can be found in the [Usage](https://compbioclub.github.io/CRISGI/usage/) section.
+CRISGI is designed to be user-friendly and easy to use. The package provides a set of functions that can be used to perform various tasks related to critical transitions in gene interactions. Detailed instructions on how to use CRISGI can be found in the following sections.
 
 ### 📖 Tutorials
 

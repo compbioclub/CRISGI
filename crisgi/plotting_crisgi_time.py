@@ -8,36 +8,36 @@ import crisgi.plotting as pl
 from crisgi.util import print_msg
 
 
-def interaction_score_line(sniee_obj, per_group=None, 
+def interaction_score_line(crisgi_obj, per_group=None, 
                         method='pearson', test_type='TER', 
                         interactions=None, unit_header='subject',
                    title='', out_prefix='test',
                    ax=None):
-    edata = sniee_obj.edata
+    edata = crisgi_obj.edata
     myper_group = per_group
-    for per_group in sniee_obj.groups:
+    for per_group in crisgi_obj.groups:
         if myper_group is not None and per_group != myper_group:
             continue
         df = edata.obs.copy()
         if interactions is None:
-            key = f'{method}_{sniee_obj.groupby}_{per_group}_{test_type}'
+            key = f'{method}_{crisgi_obj.groupby}_{per_group}_{test_type}'
             print(key)
             myinteractions = edata.uns[key]
         else:
             myinteractions = [x for x in interactions if x in edata.var_names]
         print(interactions)
-        df['avg(score)'] = edata[:, myinteractions].layers[f'{sniee_obj.ref_time}_{method}_entropy'].mean(axis=1)
+        df['avg(score)'] = edata[:, myinteractions].layers[f'{crisgi_obj.ref_time}_{method}_entropy'].mean(axis=1)
 
         if unit_header is not None:
             print(df)
-            sns.lineplot(df, x='time', y='avg(score)', hue=sniee_obj.groupby, 
+            sns.lineplot(df, x='time', y='avg(score)', hue=crisgi_obj.groupby, 
                         units=unit_header, estimator=None,
                         ax=ax)
         else:
-            sns.lineplot(df, x='time', y='avg(score)', hue=sniee_obj.groupby, 
+            sns.lineplot(df, x='time', y='avg(score)', hue=crisgi_obj.groupby, 
                         ax=ax)
                     
-        mytitle = title + f'{sniee_obj.dataset} per {per_group}\n{method} entropy score of {len(myinteractions)} {test_type}s '
+        mytitle = title + f'{crisgi_obj.dataset} per {per_group}\n{method} entropy score of {len(myinteractions)} {test_type}s '
         if ax is not None:
             ax.set_title(mytitle)
         elif out_prefix:
@@ -48,14 +48,14 @@ def interaction_score_line(sniee_obj, per_group=None,
             plt.title(mytitle)
             plt.show()
 
-def get_interaction_score(sniee_obj, per_group, groupby=None, interactions=None, 
+def get_interaction_score(crisgi_obj, per_group, groupby=None, interactions=None, 
                        method='pearson', test_type='TER',
                         subject_header='subject',
                         out_dir=None):
-    edata = sniee_obj.edata
+    edata = crisgi_obj.edata
 
     if groupby is None:
-        groupby = sniee_obj.groupby
+        groupby = crisgi_obj.groupby
 
     if interactions is None:
         interactions = edata.uns[f'{method}_{groupby}_{per_group}_{test_type}']
@@ -72,10 +72,10 @@ def get_interaction_score(sniee_obj, per_group, groupby=None, interactions=None,
         t_is = [time2i[t] for t in sedata.obs['time']]
         X = np.empty((len(interactions), len(times)))
         X[:] = np.nan
-        X[:, t_is] = sedata[:, interactions].layers[f'{sniee_obj.ref_time}_{method}_entropy'].T
+        X[:, t_is] = sedata[:, interactions].layers[f'{crisgi_obj.ref_time}_{method}_entropy'].T
         df = pd.DataFrame(X, columns=times, index=interactions)
         if out_dir is None:
-            out_dir = sniee_obj.out_dir
+            out_dir = crisgi_obj.out_dir
         fn = f'{out_dir}/{subject}_{method}_{groupby}_{per_group}_{test_type}{len(interactions)}_interaction_score.csv'
         df.to_csv(fn)
         print_msg(f'[Output] The subject {subject} {method} {groupby} {per_group} {test_type}{len(interactions)} entropy scores are saved to:\n{fn}')
@@ -207,8 +207,8 @@ def draw_gene_network(*args, **kwargs):
     pl.draw_gene_network(*args, **kwargs)
 
 
-def pathway_dynamic(*args, **kwargs):
-    pl.pathway_dynamic(*args, **kwargs)
+def pheno_level_accumulated_top_n_ORA(*args, **kwargs):
+    pl.pheno_level_accumulated_top_n_ORA(*args, **kwargs)
 
 
 
