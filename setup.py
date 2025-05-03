@@ -7,7 +7,7 @@ setup(
     url='https://github.com/compbioclub/CRISGI',
     include_package_data=True,
      package_data={
-        'crisgi': ['*.pk'],  # ✅ 指定要打包的数据文件
+        'crisgi': ['*.pk'],
     },
     install_requires=[],
     description="...",

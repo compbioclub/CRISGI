@@ -7,7 +7,7 @@ crisgi_obj.test_DER(
     groupby,
     target_group=None,
     test_method="wilcoxon",
-    method='prod',
+    method='pos_coexp',
 )
 ```
 
@@ -20,7 +20,7 @@ Performs differential entropy ranking (DER) analysis on the provided AnnData obj
 | groupby        | str      | The column in `adata.obs` used to define groups for comparison.                             |
 | target_group   | str, optional | Specific group to compare against the reference group. If `None`, all groups are compared. |
 | test_method    | str, optional | Statistical test method to use (default: `"wilcoxon"`).                                  |
-| method         | str, optional | Entropy calculation method (default: `'prod'`).                                          |
+| method         | str, optional | Entropy calculation method (default: `'pos_coexp'`).                                          |
 
 ## Return type
 
@@ -41,7 +41,7 @@ A DataFrame containing differential entropy ranking results for each group compa
 
 ```python
 # Assume `obj` is an instance with an AnnData object as `obj.adata`
-# Compare groups in the 'cell_type' column using the default Wilcoxon test and 'prod' method
+# Compare groups in the 'cell_type' column using the default Wilcoxon test and 'pos_coexp' method
 result_df = obj.test_DER(groupby='cell_type')
 
 # To compare a specific group, e.g., 'B_cell', against all others:

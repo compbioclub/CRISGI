@@ -4,9 +4,9 @@
 
 ```python
 find_interaction_module(
-    per_group,
+    target_group,
     layer='log1p',
-    method='prod',
+    method='pos_coexp',
     test_type='TER',
     interactions=None,
     unit_header='subject',
@@ -25,9 +25,9 @@ Identifies and clusters gene interaction modules within a specified group using 
 
 | Name          | Type            | Description                                                                                  |
 |---------------|-----------------|----------------------------------------------------------------------------------------------|
-| per_group     | str             | The group label to analyze within the data.                                                  |
+| target_group     | str             | The group label to analyze within the data.                                                  |
 | layer         | str, optional   | The data layer to use for calculations (default: `'log1p'`).                                 |
-| method        | str, optional   | Method for interaction calculation (default: `'prod'`).                                      |
+| method        | str, optional   | Method for interaction calculation (default: `'pos_coexp'`).                                      |
 | test_type     | str, optional   | Type of statistical test to use (default: `'TER'`).                                          |
 | interactions  | list, optional  | List of interaction names to analyze. If `None`, uses all available interactions.            |
 | unit_header   | str, optional   | Column in `obs` to use as the unit identifier (default: `'subject'`).                        |
@@ -65,9 +65,9 @@ A DataFrame indexed by interaction names, containing the assigned community and 
 # Assume `crisgi` is an instance of CRISGI with loaded data
 
 result_df = crisgi.find_interaction_module(
-    per_group='GroupA',
+    target_group='GroupA',
     layer='log1p',
-    method='prod',
+    method='pos_coexp',
     test_type='TER',
     interactions=None,  # Use all available interactions
     unit_header='subject',

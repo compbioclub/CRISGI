@@ -6,7 +6,7 @@
 crisgi_obj.get_DER(
     target_group=None,
     n_top_interactions=None,
-    method='prod',
+    method='pos_coexp',
     p_adjust=True,
     p_cutoff=0.05,
     fc_cutoff=1,
@@ -22,7 +22,7 @@ Identifies Differentially Expressed Reactions (DER) between groups in the datase
 |--------------------|-----------|-----------------------------------------------------------------------------------------------|
 | `target_group`     | str or None | The group to compare against all others. If `None`, all groups are compared.                |
 | `n_top_interactions` | int or None | Number of top interactions to return per group. If `None`, returns all.                     |
-| `method`           | str       | Method used for ranking genes (e.g., `'prod'`).                                              |
+| `method`           | str       | Method used for ranking genes (e.g., `'pos_coexp'`).                                              |
 | `p_adjust`         | bool      | Whether to use adjusted p-values (`True`) or raw p-values (`False`).                         |
 | `p_cutoff`         | float     | P-value cutoff for significance.                                                             |
 | `fc_cutoff`        | float     | Log fold change cutoff for significance.                                                     |
@@ -54,7 +54,7 @@ obj.get_DER()
 obj.get_DER(
     target_group='GroupA',
     n_top_interactions=20,
-    method='prod',
+    method='pos_coexp',
     p_adjust=True,
     p_cutoff=0.01,
     fc_cutoff=1.5,

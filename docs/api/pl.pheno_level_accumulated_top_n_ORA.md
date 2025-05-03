@@ -5,7 +5,7 @@
 ```python
 pl.pheno_level_accumulated_top_n_ORA(
     target_group,
-    method="pearson",
+    method="pos_coexp",
     test_type="TER",
     p_adjust=True,
     p_cutoff=0.05,
@@ -24,7 +24,7 @@ Performs pathway enrichment analysis at the phenotype level using the top-N accu
 | Name               | Type                | Description                                                                                                    |
 |--------------------|---------------------|----------------------------------------------------------------------------------------------------------------|
 | `target_group`     | str                 | Target group for enrichment analysis (e.g., phenotype or cluster name).                                        |
-| `method`           | str, optional       | Correlation method used for analysis. Default is `"pearson"`.                                                  |
+| `method`           | str, optional       | Correlation method used for analysis. Default is `"pos_coexp"`.                                         |
 | `test_type`        | str, optional       | Type of statistical test. Default is `"TER"`.                                                                  |
 | `p_adjust`         | bool, optional      | Whether to use adjusted p-values for filtering. Default is `True`.                                             |
 | `p_cutoff`         | float, optional     | P-value cutoff for significance filtering. Default is `0.05`.                                                  |

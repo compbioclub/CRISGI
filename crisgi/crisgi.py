@@ -96,17 +96,17 @@ class CRISGI():
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
     # CRISGI
-    def init_edata(self, per_obss, headers):
+    def init_edata(self, test_obss, headers):
         adata = self.adata
-        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
+        test_obss_is = [adata[test_obs, :].obs.i.tolist() for test_obs in test_obss]
         adata = self.adata
         bg_net = adata.varm['bg_net']
         row, col = bg_net.nonzero()
-        per_n = len(per_obss_is)
+        target_n = len(test_obss_is)
         interaction_n = bg_net.count_nonzero()
-        edata = ad.AnnData(np.zeros((per_n, interaction_n)))
-        per_obs = list(chain.from_iterable(per_obss))
-        df = adata[per_obs, :].obs[headers].copy().drop_duplicates()
+        edata = ad.AnnData(np.zeros((target_n, interaction_n)))
+        test_obs = list(chain.from_iterable(test_obss))
+        df = adata[test_obs, :].obs[headers].copy().drop_duplicates()
         df.index = df['test']
         edata.obs = df
         edata.var_names = adata.var_names[row].astype(str) + '_' + adata.var_names[col].astype(str)
@@ -212,7 +212,7 @@ class CRISGI():
         sc.tl.umap(adata, random_state=random_state)
 
     # CRISGI
-    def _prod(self, X, obs_is, row, col, obs_cutoff=100):
+    def _pos_coexp(self, X, obs_is, row, col, obs_cutoff=100):
         _, M = X.shape
         if len(obs_is) > obs_cutoff:
             X_tmp = X[obs_is,:]
@@ -224,7 +224,7 @@ class CRISGI():
                     R[j, k] += X[i, j] * X[i, k]
         return R
     
-    def _negprod(self, X, obs_is, row, col, obs_cutoff=100):
+    def _neg_coexp(self, X, obs_is, row, col, obs_cutoff=100):
         _, M = X.shape
         if len(obs_is) > obs_cutoff:
             X_tmp = X[obs_is, :]
@@ -416,7 +416,7 @@ class CRISGI():
                't_statistic': t_statistic, 'p_value': p_value}
         return res
 
-    def cohort_level_top_n_ORA(self,n_top_interactions=None, n_space=10,method='pearson',gene_sets=['KEGG_2021_Human',
+    def cohort_level_top_n_ORA(self,n_top_interactions=None, n_space=10,method='pos_coexp',gene_sets=['KEGG_2021_Human',
                                       'GO_Molecular_Function_2023', 
                                       'GO_Cellular_Component_2023', 
                                       'GO_Biological_Process_2023',
@@ -466,7 +466,7 @@ class CRISGI():
 
     # CRISGI pathwau_enrich -> pheno_level_accumulated_top_n_ORA
     def pheno_level_accumulated_top_n_ORA(self, target_group, n_top_interactions=None, n_space=10,
-                       method='pearson', test_type='TER',
+                       method='pos_coexp', test_type='TER',
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'],
@@ -579,16 +579,16 @@ class CRISGI():
         return df
     
     # CRISGI
-    def check_common_diff(self, top_n, per_group, layer='log1p', 
+    def check_common_diff(self, top_n, target_group, layer='log1p', 
                           method='pos_coexp', test_type='TER', 
                           interactions=None, unit_header='subject',
                           out_dir=None):
         edata = self.edata
         adata = self.adata
-        myper_group = per_group
+        mytarget_group = target_group
 
         if interactions is None:
-            key = f'{method}_{self.groupby}_{per_group}_{test_type}'
+            key = f'{method}_{self.groupby}_{target_group}_{test_type}'
             myinteractions = edata.uns[key]
         else:
             myinteractions = [x for x in interactions if x in edata.var_names]
@@ -615,17 +615,17 @@ class CRISGI():
         pd.DataFrame(edata.obs).to_csv(f'./{out_dir}/top_{top_n}_overlap.csv')
 
     # CRISGI
-    def find_interaction_module(self, per_group, layer='log1p',
+    def find_interaction_module(self, target_group, layer='log1p',
                           method='pos_coexp', test_type='TER', 
                           interactions=None, unit_header='subject',
                           out_dir=None, label_df=None,
                           n_neighbors=10, strategy='bottom_up'):
         edata = self.edata
         adata = self.adata
-        myper_group = per_group
+        mytarget_group = target_group
 
         if interactions is None:
-            key = f'{method}_{self.groupby}_{per_group}_{test_type}'
+            key = f'{method}_{self.groupby}_{target_group}_{test_type}'
             myinteractions = edata.uns[key]
         else:
             myinteractions = [x for x in interactions if x in edata.var_names]
@@ -633,7 +633,7 @@ class CRISGI():
         genes1 = [x.split('_')[0] for x in myinteractions]
         genes2 = [x.split('_')[1] for x in myinteractions]
 
-        sub_adata = adata[(adata.obs[self.groupby] == myper_group)]
+        sub_adata = adata[(adata.obs[self.groupby] == mytarget_group)]
         sub_adata = sub_adata[sub_adata.obs.sort_values(by=[unit_header, 'time']).index]
 
         X = np.multiply(sub_adata[:, genes1].layers[layer], 
@@ -672,9 +672,9 @@ class CRISGI():
 
         if out_dir is None:
             out_dir = self.out_dir
-        fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myinteractions)}_interaction_matrix.csv'
+        fn = f'{out_dir}/{method}_{self.groupby}_{target_group}_{test_type}{len(myinteractions)}_interaction_matrix.csv'
         df.to_csv(fn)
-        print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myinteractions)} interaction matrix are saved to:\n{fn}')
+        print_msg(f'[Output] The {method} {self.groupby} {target_group} {test_type}{len(myinteractions)} interaction matrix are saved to:\n{fn}')
 
         df = pd.DataFrame({'interaction':myinteractions,
                           'community':seat.labels_,
@@ -682,27 +682,27 @@ class CRISGI():
 
         df.index = df.interaction
         df = df.drop(columns=['interaction'])
-        fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myinteractions)}_interaction_community_module.csv'
+        fn = f'{out_dir}/{method}_{self.groupby}_{target_group}_{test_type}{len(myinteractions)}_interaction_community_module.csv'
         df.to_csv(fn)
-        print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myinteractions)} interaction community & module are saved to:\n{fn}')
+        print_msg(f'[Output] The {method} {self.groupby} {target_group} {test_type}{len(myinteractions)} interaction community & module are saved to:\n{fn}')
 
-        fn = f'{out_dir}/{method}_{self.groupby}_{per_group}_{test_type}{len(myinteractions)}_interaction_hierarchy.nwk'        
+        fn = f'{out_dir}/{method}_{self.groupby}_{target_group}_{test_type}{len(myinteractions)}_interaction_hierarchy.nwk'        
         with open(fn, 'w') as f:
             f.write(seat.newick)
-        print_msg(f'[Output] The {method} {self.groupby} {per_group} {test_type}{len(myinteractions)} interaction hierarchy are saved to:\n{fn}')
+        print_msg(f'[Output] The {method} {self.groupby} {target_group} {test_type}{len(myinteractions)} interaction hierarchy are saved to:\n{fn}')
         return df
 
-    def network_analysis(self, per_group, layer='log1p',
+    def network_analysis(self, target_group, layer='log1p',
                           method='pos_coexp', test_type='TER', 
                           interactions=None, unit_header='subject',
                           out_dir=None,    
                           n_neighbors=10, strategy='bottom_up'):
         edata = self.edata
         adata = self.adata
-        myper_group = per_group
+        mytarget_group = target_group
 
         if interactions is None:
-            key = f'{method}_{self.groupby}_{per_group}_{test_type}'
+            key = f'{method}_{self.groupby}_{target_group}_{test_type}'
             myinteractions = edata.uns[key]
         else:
             myinteractions = [x for x in interactions if x in edata.var_names]
@@ -724,7 +724,7 @@ class CRISGI():
 
     # CRISGI
     def survival_analysis(self, ref_group,
-                        per_group,
+                        target_group,
                         interactions=None,
                         groupbys=[],
                         survival_types = ['os', 'pfs'],
@@ -734,7 +734,7 @@ class CRISGI():
 
         edata = self.edata
         if interactions is None:
-            interactions = edata.uns[f'{method}_{self.groupby}_{per_group}_{test_type}']
+            interactions = edata.uns[f'{method}_{self.groupby}_{target_group}_{test_type}']
         else:
             interactions = [x for x in interactions if x in edata.var_names]
         if len(interactions) == 0:
@@ -778,9 +778,9 @@ class CRISGI():
                 plt.ylabel(r"est. probability of survival $\hat{S}(t)$")
                 plt.xlabel(f"{survival.upper()} {time_unit} $t$")
                 plt.legend(loc="best")
-                plt.title(f'{title} {method}_{self.groupby}_{per_group}_{len(interactions)}{test_type}s\nlog-rank test\nchi2: {round(chi2, 2)}, p-value: {p_value}')
+                plt.title(f'{title} {method}_{self.groupby}_{target_group}_{len(interactions)}{test_type}s\nlog-rank test\nchi2: {round(chi2, 2)}, p-value: {p_value}')
                 plt.show()
-                fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_{len(interactions)}{test_type}s_{survival.upper()}_surv.png'
+                fn = f'{self.out_dir}/{method}_{self.groupby}_{target_group}_{len(interactions)}{test_type}s_{survival.upper()}_surv.png'
                 print_msg(f'[Output] The survival plot are saved to:\n{fn}')
 
     def detect_startpoint(self, symptom_types = ["Symptomatic"]):
@@ -860,21 +860,25 @@ class CRISGITime(CRISGI):
         
 
     # CRISGITime
-    def calculate_entropy(self, ref_obs, per_obss, groupby, ref_time, layer='log1p'):
+    def calculate_entropy(self, ref_obs, test_obss, groupby, ref_time, layer='log1p'):
         print('reference observations', len(ref_obs))
-        print('perputation groups', len(per_obss))
+        print('test population', len(test_obss))
         self.ref_time = ref_time
-        self.init_edata(per_obss, headers=['test', 'subject', 'time', groupby])
+        self.init_edata(test_obss, headers=['test', 'subject', 'time', groupby])
 
-        if 'pos_coexp' in self.interaction_methods:
-            self._calculate_entropy_by_prod(ref_obs, per_obss, layer=layer)
-        elif 'neg_coexp' in self.interaction_methods:
-            self._calculate_entropy_by_negprod(ref_obs, per_obss, layer=layer)
-        else:
-            self._calculate_entropy(ref_obs, per_obss)
+        for method in self.interaction_methods:
+            if method not in self.adata.uns['interaction_methods']:
+                raise ValueError(f"Unknown method: {method}")
+            elif method == 'pos_coexp':
+                self._calculate_entropy_by_coexp(ref_obs, test_obss, method=method, method_flag=1, layer=layer)
+            elif method == 'neg_coexp':
+                self._calculate_entropy_by_coexp(ref_obs, test_obss, method=method, method_flag=0, layer=layer)
+            else:
+                self._calculate_entropy(ref_obs, test_obss, method=method)
 
     # CRISGITime
-    def _calculate_entropy_by_prod(self, ref_obs, per_obss, layer='log1p', obs_cutoff=100):
+    def _calculate_entropy_by_coexp(self, ref_obs, test_obss, method='pos_coexp', method_flag=1, layer='log1p', obs_cutoff=100):
+        
         adata = self.adata
         edata = self.edata
 
@@ -883,7 +887,7 @@ class CRISGITime(CRISGI):
 
         ref_obs_is = adata[ref_obs, :].obs.i.tolist()
         ref_n = len(ref_obs_is)
-        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
+        test_obss_is = [adata[test_obs, :].obs.i.tolist() for test_obs in test_obss]
         X = get_array(adata, layer=layer)
         N, M = X.shape
 
@@ -891,87 +895,55 @@ class CRISGITime(CRISGI):
         ref_interaction_std = (gene_std[row]+gene_std[col])/2
 
         print_msg(f'---Calculating the entropy for reference group')
-        ref_R_sum = self._prod(X, ref_obs_is, row, col, obs_cutoff=obs_cutoff)
+        
+        ref_R_sum = self._pos_coexp(X, ref_obs_is, row, col, obs_cutoff=obs_cutoff) if method_flag == 1 else self._neg_coexp(X, ref_obs_is, row, col, obs_cutoff=obs_cutoff)
+
         ref_R_sparse = csr_matrix((ref_R_sum[row, col]/(ref_n), (row, col)), shape = (M, M))
         ref_interaction_entropy = self.sparseR2entropy(ref_R_sparse, row, col)
 
-        for per_i, per_obs_is in enumerate(per_obss_is):
-            print_msg(f'---Calculating the entropy for pertutation group {per_i}, observations {len(per_obs_is)}')
-            R = self._prod(X, per_obs_is, row, col, obs_cutoff=obs_cutoff)
-            R = csr_matrix(((R[row, col]+ref_R_sum[row, col])/(ref_n + len(per_obs_is)), (row, col)), shape = (M, M))
-            per_interaction_entropy = self.sparseR2entropy(R, row, col)
-            delta_entropy = np.abs(per_interaction_entropy - ref_interaction_entropy)
+        for test_i, test_obs_is in enumerate(test_obss_is):
+            print_msg(f'---Calculating the entropy for test population {test_i}, observations {len(test_obs_is)}')
 
-            gene_std = X[ref_obs_is + per_obs_is].std(axis=0)
-            per_interaction_std = (gene_std[row]+gene_std[col])/2
-            delta_std = np.abs(per_interaction_std - ref_interaction_std)
-            edata.X[per_i, :] = delta_entropy * delta_std
+            R = self._pos_coexp(X, test_obs_is, row, col, obs_cutoff=obs_cutoff) if method_flag == 1 else self._neg_coexp(X, test_obs_is, row, col, obs_cutoff=obs_cutoff)
+            
+            R = csr_matrix(((R[row, col]+ref_R_sum[row, col])/(ref_n + len(test_obs_is)), (row, col)), shape = (M, M))
+            test_interaction_entropy = self.sparseR2entropy(R, row, col)
+            delta_entropy = np.abs(test_interaction_entropy - ref_interaction_entropy)
 
-        edata.layers[f'{self.ref_time}_pos_coexp_entropy'] = edata.X
-        self.edata = edata
+            gene_std = X[ref_obs_is + test_obs_is].std(axis=0)
+            test_interaction_std = (gene_std[row]+gene_std[col])/2
+            delta_std = np.abs(test_interaction_std - ref_interaction_std)
+            edata.X[test_i, :] = delta_entropy * delta_std
         
-    def _calculate_entropy_by_negprod(self, ref_obs, per_obss, layer='log1p', obs_cutoff=100):
-        adata = self.adata
-        edata = self.edata
-
-        bg_net = adata.varm['bg_net']
-        row, col = bg_net.nonzero()
-
-        ref_obs_is = adata[ref_obs, :].obs.i.tolist()
-        ref_n = len(ref_obs_is)
-        per_obss_is = [adata[per_obs, :].obs.i.tolist() for per_obs in per_obss]
-        X = get_array(adata, layer=layer)
-        N, M = X.shape
-
-        gene_std = X[ref_obs_is].std(axis=0)
-        ref_interaction_std = (gene_std[row] + gene_std[col]) / 2
-
-        print_msg(f'---Calculating the entropy for reference group (negprod)')
-        ref_R_sum = self._negprod(X, ref_obs_is, row, col, obs_cutoff=obs_cutoff)
-        ref_R_sparse = csr_matrix((ref_R_sum[row, col] / ref_n, (row, col)), shape=(M, M))
-        ref_interaction_entropy = self.sparseR2entropy(ref_R_sparse, row, col)
-
-        for per_i, per_obs_is in enumerate(per_obss_is):
-            print_msg(f'---Calculating the entropy for pertutation group {per_i} (negprod), observations {len(per_obs_is)}')
-            R = self._negprod(X, per_obs_is, row, col, obs_cutoff=obs_cutoff)
-            R = csr_matrix(((R[row, col] + ref_R_sum[row, col]) / (ref_n + len(per_obs_is)), (row, col)), shape=(M, M))
-            per_interaction_entropy = self.sparseR2entropy(R, row, col)
-            delta_entropy = np.abs(per_interaction_entropy - ref_interaction_entropy)
-
-            gene_std = X[ref_obs_is + per_obs_is].std(axis=0)
-            per_interaction_std = (gene_std[row] + gene_std[col]) / 2
-            delta_std = np.abs(per_interaction_std - ref_interaction_std)
-            edata.X[per_i, :] = delta_entropy * delta_std
-
-        edata.layers[f'{self.ref_time}_neg_coexp_entropy'] = edata.X
+        edata.layers[f'{self.ref_time}_{method}_entropy'] = edata.X
         self.edata = edata
 
 
     # CRISGITime
-    def _calculate_entropy(self, ref_obs, per_obss):
+    def _calculate_entropy(self, ref_obs, test_obss, method):
         adata_dict = {}
         print_msg(f'---Calculating the group entropy for reference')
-        adata = self._calculate_group_entropy(ref_obs)
+        adata = self._calculate_group_entropy(ref_obs, method=method)
         adata_dict[f'{ref_obs}'] = adata
 
-        for per_obs in per_obss:
-            print_msg(f'---Calculating the group entropy for {per_obs}')
-            adata = self._calculate_group_entropy(ref_obs + per_obs)
-            adata_dict[','.join(per_obs)] = adata
+        for test_obs in test_obss:
+            print_msg(f'---Calculating the group entropy for {test_obs} (test population)')
+            adata = self._calculate_group_entropy(ref_obs + test_obs, method=method)
+            adata_dict[','.join(test_obs)] = adata
         self.adata_dict = adata_dict
 
-        self._calculate_delta_entropy(ref_obs, per_obss)
+        self._calculate_delta_entropy(ref_obs, test_obss, method=method)
 
     # CRISGITime
-    def _calculate_delta_entropy(self, ref_obs, per_obss):
-        self.per_obss = per_obss
+    def _calculate_delta_entropy(self, ref_obs, test_obss, method):
+        self.test_obss = test_obss
         self.ref_obs = ref_obs
         adata_dict = self.adata_dict
-        entropy_matrix = np.zeros((len(per_obss), self.adata.varm['bg_net'].count_nonzero()))
+        entropy_matrix = np.zeros((len(test_obss), self.adata.varm['bg_net'].count_nonzero()))
 
         row, col = self.adata.varm['bg_net'].nonzero()
         edata = ad.AnnData(entropy_matrix)
-        edata.obs_names = [x[0] for x in per_obss]
+        edata.obs_names = [x[0] for x in test_obss]
         edata.obs = self.adata[edata.obs_names, :].obs
         edata.var_names = self.adata.var_names[row] + '_' + self.adata.var_names[col]
         edata.var['gene1'] = self.adata.var_names[row]
@@ -979,37 +951,34 @@ class CRISGITime(CRISGI):
         edata.var['gene1_i'] = row
         edata.var['gene2_i'] = col
 
-        for method in self.interaction_methods:
-            edata.layers[f'{self.ref_time}_{method}_entropy'] = entropy_matrix.copy()
-            edata.layers[f'{self.ref_time}_{method}_prob'] = entropy_matrix.copy()
-            edata.layers[f'{self.ref_time}_{method}_bg_net'] = entropy_matrix.copy()
+        edata.layers[f'{self.ref_time}_{method}_entropy'] = entropy_matrix.copy()
+        edata.layers[f'{self.ref_time}_{method}_prob'] = entropy_matrix.copy()
+        edata.layers[f'{self.ref_time}_{method}_bg_net'] = entropy_matrix.copy()
 
-        for i, per_obs in enumerate(per_obss):
+        for i, test_obs in enumerate(test_obss):
             ref_adata = adata_dict[f'{ref_obs}']
-            adata = adata_dict[','.join(per_obs)]
+            adata = adata_dict[','.join(test_obs)]
             delta_std = np.abs(adata.varm['std'] - ref_adata.varm['std'])
 
-            for method in self.interaction_methods:
-                delta_entropy = np.abs(adata.varm[f'{method}_entropy'] - ref_adata.varm[f'{method}_entropy'])
-                val = (np.array(delta_entropy[row, col]) * np.array(delta_std[row, col])).reshape(-1)
-                # direct dot product will raise much more entry, further investigate
-                edata.layers[f'{self.ref_time}_{method}_entropy'][i, :] = val
+            delta_entropy = np.abs(adata.varm[f'{method}_entropy'] - ref_adata.varm[f'{method}_entropy'])
+            val = (np.array(delta_entropy[row, col]) * np.array(delta_std[row, col])).reshape(-1)
+            # direct dot product will raise much more entry, further investigate
+            edata.layers[f'{self.ref_time}_{method}_entropy'][i, :] = val
 
-                val = adata.varm[f'{method}_bg_net'][row, col].reshape(-1)
-                edata.layers[f'{self.ref_time}_{method}_bg_net'][i, :] = val
+            val = adata.varm[f'{method}_bg_net'][row, col].reshape(-1)
+            edata.layers[f'{self.ref_time}_{method}_bg_net'][i, :] = val
 
-                val = csr_matrix(adata.varm[f'{method}_prob'])[row, col].reshape(-1)
-                edata.layers[f'{self.ref_time}_{method}_prob'][i, :] = val
+            val = csr_matrix(adata.varm[f'{method}_prob'])[row, col].reshape(-1)
+            edata.layers[f'{self.ref_time}_{method}_prob'][i, :] = val
 
         self.edata = edata
 
     # CRISGITime
-    def _calculate_group_entropy(self, obs):
+    def _calculate_group_entropy(self, obs, method):
         adata = self.adata[obs, :]
 
-        for method in self.interaction_methods:
-            self._calculate_node_entropy(adata, method)
-            self._calculate_edge_entropy(adata, method)
+        self._calculate_node_entropy(adata, method)
+        self._calculate_edge_entropy(adata, method)
         return adata
 
     # CRISGITime
@@ -1051,48 +1020,48 @@ class CRISGITime(CRISGI):
             adata.varm[key] = csr_matrix((val, (row, col)), shape = adata.varm['bg_net'].shape)
 
     # CRISGITime
-    def test_TER(self, per_group=None, p_cutoff=0.05, method='pos_coexp', groups=None):
-        myper_group = per_group
+    def test_TER(self, target_group=None, p_cutoff=0.05, method='pos_coexp', groups=None):
+        mytarget_group = target_group
         edata = self.edata
 
         if groups is None:
             groups = self.groups
-        for per_group in groups:
-            if myper_group is not None and myper_group != per_group:
+        for target_group in groups:
+            if mytarget_group is not None and mytarget_group != target_group:
                 continue
             trend_list = []
-            interactions = edata.uns[f'{method}_{self.groupby}_{per_group}_DER']
+            interactions = edata.uns[f'{method}_{self.groupby}_{target_group}_DER']
             filtered_interactions = []
             for interaction in interactions:
-                per_edata = edata[edata.obs[self.groupby] == per_group, :]
+                target_edata = edata[edata.obs[self.groupby] == target_group, :]
                 layer = f'{self.ref_time}_{method}_entropy'
-                trend_res = self._test_trend(interaction, per_edata, layer, p_cutoff=p_cutoff)
-                is_per_trend = trend_res['trend'] != 'no trend'
+                trend_res = self._test_trend(interaction, target_edata, layer, p_cutoff=p_cutoff)
+                is_target_trend = trend_res['trend'] != 'no trend'
 
-                ref_edata = edata[edata.obs[self.groupby] != per_group, :]
+                ref_edata = edata[edata.obs[self.groupby] != target_group, :]
                 zero_res = self._test_zero_trend(interaction, ref_edata, layer)
                 is_ref_zero = zero_res['p_value'] < p_cutoff
                 trend_res.update(zero_res)
 
-                is_TER = is_per_trend and is_ref_zero
+                is_TER = is_target_trend and is_ref_zero
                 trend_res['TER'] = is_TER
-                trend_res['per_group'] = per_group
+                trend_res['target_group'] = target_group
                 if is_TER:
                     filtered_interactions.append(interaction)
                 trend_list.append(trend_res)
 
-            print(f'{method}_{self.groupby}_{per_group}', 'DER', len(interactions), 'TER', len(filtered_interactions))
-            edata.uns[f'{method}_{self.groupby}_{per_group}_TER'] = filtered_interactions
+            print(f'{method}_{self.groupby}_{target_group}', 'DER', len(interactions), 'TER', len(filtered_interactions))
+            edata.uns[f'{method}_{self.groupby}_{target_group}_TER'] = filtered_interactions
 
             df = pd.DataFrame(trend_list)
-            fn = f'{self.out_dir}/{method}_{self.groupby}_{per_group}_TER.csv'
+            fn = f'{self.out_dir}/{method}_{self.groupby}_{target_group}_TER.csv'
             df.to_csv(fn, index=False)
             print_msg(f'[Output] The trend expressed interaction (TER) statistics are saved to:\n{fn}')
-            edata.uns[f'{method}_{self.groupby}_{per_group}_TER_df'] = df
+            edata.uns[f'{method}_{self.groupby}_{target_group}_TER_df'] = df
         return
 
     # CRISGITime
-    def test_val_trend_entropy(self, interactions, method='pearson',
+    def test_val_trend_entropy(self, interactions, method='pos_coexp',
                                p_cutoff=0.05,
                                out_prefix='./test'):
         edata = self.edata

@@ -4,9 +4,9 @@
 
 ```python
 crisgi_obj.network_analysis(
-    per_group,
+    target_group,
     layer="log1p",
-    method="prod",
+    method="pos_coexp",
     test_type="TER",
     interactions=None,
     unit_header="subject",
@@ -22,9 +22,9 @@ Performs network analysis on the dataset using specified parameters and interact
 
 | Name          | Type            | Description                                                                                   |
 |---------------|-----------------|-----------------------------------------------------------------------------------------------|
-| per_group     | str             | The group identifier for which the network analysis is performed.                             |
+| target_group     | str             | The group identifier for which the network analysis is performed.                             |
 | layer         | str, optional   | The data layer to use for analysis (default: `'log1p'`).                                     |
-| method        | str, optional   | The method for interaction calculation (default: `'prod'`).                                  |
+| method        | str, optional   | The method for interaction calculation (default: `'pos_coexp'`).                                  |
 | test_type     | str, optional   | The statistical test type to use (default: `'TER'`).                                         |
 | interactions  | list, optional  | List of interaction features to include; if `None`, uses default from `edata.uns`.           |
 | unit_header   | str, optional   | The header indicating the unit of analysis (default: `'subject'`).                           |
@@ -51,12 +51,12 @@ This function does not return a value. It performs network analysis and may prin
 # Assume `crisgi` is an instance of the CRISGI class
 
 # Perform network analysis for group 'A' with default settings
-crisgi.network_analysis(per_group='A')
+crisgi.network_analysis(target_group='A')
 
 # Perform network analysis with custom interactions and output directory
 custom_interactions = ['gene1', 'gene2', 'gene3']
 crisgi.network_analysis(
-    per_group='B',
+    target_group='B',
     interactions=custom_interactions,
     out_dir='/path/to/output',
     n_neighbors=15,

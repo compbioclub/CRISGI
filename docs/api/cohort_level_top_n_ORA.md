@@ -6,7 +6,7 @@
 crisgi_obj.cohort_level_top_n_ORA(
     n_top_interactions=None,
     n_space=10,
-    method='pearson',
+    method='pos_coexp',
     gene_sets=[
         'KEGG_2021_Human',
         'GO_Molecular_Function_2023',
@@ -28,7 +28,7 @@ Performs cohort-level over-representation analysis (ORA) for the top N interacti
 |---------------------|-----------|-----------------------------------------------------------------------------------------------|
 | n_top_interactions  | int, optional | Number of top interactions to consider. If None, uses all available interactions.         |
 | n_space             | int, optional | Step size for the range of top N interactions to analyze. Default is 10.                  |
-| method              | str, optional | Method used for scoring interactions (e.g., 'pearson'). Default is 'pearson'.             |
+| method              | str, optional | Method used for scoring interactions (e.g., 'pearson'). Default is 'pos_coexp'.             |
 | gene_sets           | list of str, optional | List of gene set names to use for enrichment analysis. Default includes several common sets. |
 | background          | list or None, optional | Background gene set for enrichment. If None, uses all genes in the dataset.              |
 | organism            | str, optional | Organism name (e.g., 'human'). Default is 'human'.                                        |

@@ -1,10 +1,12 @@
+# pl.interaction_score_line
+
 ## Function
 
 ```python
 pl.interaction_score_line(
     crisgi_obj,
-    per_group=None,
-    method="pearson",
+    target_group=None,
+    method="pos_coexp",
     test_type="TER",
     interactions=None,
     unit_header="subject",
@@ -21,8 +23,8 @@ Generates and plots a line chart of interaction scores (entropy-based) for a spe
 | Name           | Type                | Description                                                                                      |
 |----------------|---------------------|--------------------------------------------------------------------------------------------------|
 | crisgi_obj     | CRISGI              | The CRISGI object containing experimental data and metadata.                                      |
-| per_group      | str or None         | Specific group to plot. If `None`, iterates over all groups in `crisgi_obj.groups`.              |
-| method         | str                 | Statistical method for score calculation (e.g., `'pearson'`).                                    |
+| target_group   | str or None         | Specific group to plot. If `None`, iterates over all groups in `crisgi_obj.groups`.              |
+| method         | str                 | Statistical method for score calculation (e.g., `'pos_coexp'`).                                    |
 | test_type      | str                 | Type of test or interaction (e.g., `'TER'`).                                                     |
 | interactions   | list or None        | List of interaction names to include. If `None`, uses all interactions for the group and method. |
 | unit_header    | str or None         | Column name in `obs` to use as units for repeated measures (e.g., `'subject'`).                  |
@@ -52,7 +54,7 @@ import crisgi.plotting_crisgi_time as pl
 selected_interactions = ['geneA_geneB', 'geneC_geneD']
 pl.interaction_score_line(
     crisgi_obj,
-    per_group='Symptomatic',
+    target_group='Symptomatic',
     method='pearson',
     test_type='TER',
     interactions=selected_interactions,

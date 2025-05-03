@@ -9,7 +9,6 @@ nav:
   - 📖 Tutorial: 
       - tutorial.md
       - tutorial/gse30550.md
-      - tutorial/covid.md
   - 📚 API:
       - api_reference.md
       - api/calculate_entropy.md
