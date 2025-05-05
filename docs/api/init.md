@@ -69,6 +69,7 @@ from crisgi import CRISGI
 adata = sc.read_h5ad('example_data.h5ad')
 crisgi = CRISGI(
     adata,
+    interaction_methods=['pearson', 'spearman'],
     n_hvg=3000,
     n_pcs=20,
     organism='human',
@@ -131,6 +132,7 @@ from crisgi import CRISGITime
 adata = sc.read_h5ad('example_data.h5ad')
 crisgi_time = CRISGITime(
     adata,
+    interaction_methods=['pos_coexp', 'spearman'],
     device='cuda',
     model_type='cnn',
     out_dir='./crisgi_time_results'

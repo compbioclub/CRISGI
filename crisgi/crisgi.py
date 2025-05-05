@@ -867,7 +867,7 @@ class CRISGITime(CRISGI):
         self.init_edata(test_obss, headers=['test', 'subject', 'time', groupby])
 
         for method in self.interaction_methods:
-            if method not in self.adata.uns['interaction_methods']:
+            if method not in ['pearson', 'spearman', 'pos_coexp', 'neg_coexp']:
                 raise ValueError(f"Unknown method: {method}")
             elif method == 'pos_coexp':
                 self._calculate_entropy_by_coexp(ref_obs, test_obss, method=method, method_flag=1, layer=layer)
@@ -1114,7 +1114,7 @@ class CRISGITime(CRISGI):
         else:
             raise ValueError(f"Unsupported model_type: {model_type}")
 
-        print(f"✅ Model type set to '{model_type}'.")
+        print(f"Model type set to '{model_type}'.")
 
     def train(self, train_loader , epochs=10):
         if self.model_type == "logistic":
