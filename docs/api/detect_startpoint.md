@@ -10,7 +10,7 @@ Detects the start point (CT_time) for samples with specified symptom types and u
 
 ## Parameters
 
-| Name           | Type         | Description                                                                                 |
+| Name           | Type         | Description                                                                                |
 |----------------|--------------|--------------------------------------------------------------------------------------------|
 | symptom_types  | list of str  | A list of symptom types to filter samples by. Should match values in `edata.obs['symptom']`. Default is `["Symptomatic"]`. |
 

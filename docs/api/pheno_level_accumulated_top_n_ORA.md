@@ -5,7 +5,7 @@ crisgi_obj.pheno_level_accumulated_top_n_ORA(
     target_group, 
     n_top_interactions=None, 
     n_space=10, 
-    method='pearson', 
+    method='pos_coexp', 
     test_type='TER', 
     gene_sets=[
         'KEGG_2021_Human',
@@ -30,11 +30,11 @@ Performs an accumulated over-representation analysis (ORA) for the top-N interac
 | `target_group`      | str             | The group or phenotype to analyze.                                                                                  |
 | `n_top_interactions`| int, optional   | The maximum number of top interactions to consider. If `None`, uses all available interactions.                     |
 | `n_space`           | int, optional   | Step size for the number of top interactions to include in each enrichment analysis. Default is 10.                 |
-| `method`            | str, optional   | Correlation or interaction method used to select interactions (e.g., 'pearson'). Default is 'pearson'.              |
-| `test_type`         | str, optional   | Type of statistical test applied (e.g., 'TER'). Default is 'TER'.                                                   |
+| `method`            | str, optional   | Methods for interaction inference (e.g., 'pearson'). Default is 'pos_coexp'.                                        |
+| `test_type`         | str, optional   | Type of statistical test applied (e.g., 'DER'). Default is 'TER'.                                                   |
 | `gene_sets`         | list of str     | List of gene set databases to use for enrichment analysis.                                                          |
 | `background`        | list or None    | Background gene set for enrichment. If `None`, uses default background.                                             |
-| `organism`          | str, optional   | Organism name for gene set enrichment (e.g., 'human'). Default is 'human'.                                         |
+| `organism`          | str, optional   | Organism name for gene set enrichment (e.g., 'human'). Default is 'human'.                                          |
 | `plot`              | bool, optional  | Whether to generate plots for the enrichment results. Default is `True`.                                            |
 
 
@@ -67,7 +67,7 @@ obj.pheno_level_accumulated_top_n_ORA(
     n_top_interactions=50,
     n_space=5,
     method='pearson',
-    test_type='TER',
+    test_type='DER',
     gene_sets=['KEGG_2021_Human'],
     organism='human',
     plot=False

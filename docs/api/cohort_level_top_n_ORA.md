@@ -28,11 +28,11 @@ Performs cohort-level over-representation analysis (ORA) for the top N interacti
 |---------------------|-----------|-----------------------------------------------------------------------------------------------|
 | n_top_interactions  | int, optional | Number of top interactions to consider. If None, uses all available interactions.         |
 | n_space             | int, optional | Step size for the range of top N interactions to analyze. Default is 10.                  |
-| method              | str, optional | Method used for scoring interactions (e.g., 'pearson'). Default is 'pos_coexp'.             |
+| method              | str, optional | Method used for scoring interactions (e.g., 'pearson'). Default is 'pos_coexp'.           |
 | gene_sets           | list of str, optional | List of gene set names to use for enrichment analysis. Default includes several common sets. |
-| background          | list or None, optional | Background gene set for enrichment. If None, uses all genes in the dataset.              |
+| background          | list or None, optional | Background gene set for enrichment. If None, uses all genes in the dataset.      |
 | organism            | str, optional | Organism name (e.g., 'human'). Default is 'human'.                                        |
-| plot                | bool, optional | Whether to generate plots for the enrichment results. Default is True.                    |
+| plot                | bool, optional | Whether to generate plots for the enrichment results. Default is True.                   |
 
 ## Return type
 

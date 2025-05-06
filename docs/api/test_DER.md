@@ -15,12 +15,12 @@ Performs differential entropy ranking (DER) analysis on the provided AnnData obj
 
 ## Parameters
 
-| Name           | Type     | Description                                                                                 |
-|----------------|----------|---------------------------------------------------------------------------------------------|
-| groupby        | str      | The column in `adata.obs` used to define groups for comparison.                             |
+| Name           | Type     | Description                                                                                     |
+|----------------|----------|-------------------------------------------------------------------------------------------------|
+| groupby        | str      | The column in `adata.obs` used to define groups for comparison.                                 |
 | target_group   | str, optional | Specific group to compare against the reference group. If `None`, all groups are compared. |
-| test_method    | str, optional | Statistical test method to use (default: `"wilcoxon"`).                                  |
-| method         | str, optional | Entropy calculation method (default: `'pos_coexp'`).                                          |
+| test_method    | str, optional | Statistical test method to use (default: `"wilcoxon"`).                                    |
+| method         | str, optional | Entropy calculation method (default: `'pos_coexp'`).                                       |
 
 ## Return type
 

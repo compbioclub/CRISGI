@@ -9,8 +9,8 @@ Loads a CRISGI object from a specified pickle file and prints a confirmation mes
 
 ## Parameters
 
-| Name   | Type   | Description                                      |
-|--------|--------|--------------------------------------------------|
+| Name   | Type   | Description                                           |
+|--------|--------|-------------------------------------------------------|
 | pk_fn  | str    | Path to the pickle file containing the CRISGI object. |
 
 ## Return type

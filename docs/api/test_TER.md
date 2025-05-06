@@ -15,11 +15,11 @@ Identifies Trend Expressed Interactions (TER) for each group in the dataset. Thi
 
 ## Parameters
 
-| Name        | Type           | Description                                                                                 |
+| Name        | Type           | Description                                                                                |
 |-------------|----------------|--------------------------------------------------------------------------------------------|
-| target_group | str or None    | Specific group to analyze. If `None`, all groups in `groups` are processed.                |
+| target_group | str or None   | Specific group to analyze. If `None`, all groups in `groups` are processed.                |
 | p_cutoff    | float          | P-value cutoff for statistical significance (default: 0.05).                               |
-| method      | str            | Method used for interaction analysis (e.g., `'pos_coexp'`).                                     |
+| method      | str            | Method used for interaction analysis (e.g., `'pos_coexp'`).                                |
 | groups      | list or None   | List of groups to analyze. If `None`, uses `self.groups`.                                  |
 
 ## Return type

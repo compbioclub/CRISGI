@@ -13,7 +13,7 @@ The `CRISGITime` class extends the `CRISGI` base class to provide time-based mod
 | `model_type` | str      | Type of model to use (`'cnn'`, `'simple_cnn'`, or `'logistic'`). Default is `'cnn'`.         |
 | `ae_path`    | str      | Path to a pre-trained autoencoder model (optional, used for CNN-based models).               |
 | `mlp_path`   | str      | Path to a pre-trained MLP model (optional, used for CNN-based models).                       |
-| `model_path` | str      | Path to a pre-trained logistic regression model (optional, used for logistic model).          |
+| `model_path` | str      | Path to a pre-trained logistic regression model (optional, used for logistic model).         |
 | `**kwargs`   | dict     | Additional keyword arguments passed to the base `CRISGI` class.                              |
 
 ## Return type

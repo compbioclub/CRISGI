@@ -729,7 +729,7 @@ class CRISGI():
                         groupbys=[],
                         survival_types = ['os', 'pfs'],
                         time_unit = 'time',
-                        test_type='DER', method='pos_coexp',
+                        test_type='TER', method='pos_coexp',
                         title=''):
 
         edata = self.edata

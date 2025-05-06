@@ -5,7 +5,7 @@
 ```python
 crisgi.test_val_trend_entropy(
     interactions,
-    method="pearson",
+    method="pos_coexp",
     p_cutoff=0.05,
     out_prefix="./test",
 )
@@ -18,7 +18,7 @@ Performs trend and zero-trend statistical tests on a list of interactions using 
 | Name         | Type            | Description                                                                                  |
 |--------------|-----------------|----------------------------------------------------------------------------------------------|
 | interactions | list of str     | List of interaction names to be tested.                                                      |
-| method       | str, optional   | Correlation method used for entropy calculation. Default is `'pearson'`.                     |
+| method       | str, optional   | Correlation method used for entropy calculation. Default is `'pos_coexp'`.                   |
 | p_cutoff     | float, optional | Significance threshold for trend and zero-trend tests. Default is `0.05`.                    |
 | out_prefix   | str, optional   | Prefix for the output CSV file containing TER statistics. Default is `'./test'`.             |
 

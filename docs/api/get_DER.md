@@ -18,15 +18,15 @@ Identifies Differentially Expressed Reactions (DER) between groups in the datase
 
 ## Parameters
 
-| Name               | Type      | Description                                                                                   |
-|--------------------|-----------|-----------------------------------------------------------------------------------------------|
-| `target_group`     | str or None | The group to compare against all others. If `None`, all groups are compared.                |
-| `n_top_interactions` | int or None | Number of top interactions to return per group. If `None`, returns all.                     |
-| `method`           | str       | Method used for ranking genes (e.g., `'pos_coexp'`).                                              |
-| `p_adjust`         | bool      | Whether to use adjusted p-values (`True`) or raw p-values (`False`).                         |
-| `p_cutoff`         | float     | P-value cutoff for significance.                                                             |
-| `fc_cutoff`        | float     | Log fold change cutoff for significance.                                                     |
-| `sortby`           | str       | Column to sort results by (`'scores'`, `'logfoldchanges'`, or other valid column names).     |
+| Name               | Type      | Description                                                                                     |
+|--------------------|-----------|-------------------------------------------------------------------------------------------------|
+| `target_group`     | str or None | The group to compare against all others. If `None`, all groups are compared.                  |
+| `n_top_interactions` | int or None | Number of top interactions to return per group. If `None`, uses all available interactions. |
+| `method`           | str       | Method used for ranking genes (e.g., `'pos_coexp'`).                                            |
+| `p_adjust`         | bool      | Whether to use adjusted p-values (`True`) or raw p-values (`False`).                            |
+| `p_cutoff`         | float     | P-value cutoff for significance.                                                                |
+| `fc_cutoff`        | float     | Log fold change cutoff for significance.                                                        |
+| `sortby`           | str       | Column to sort results by (`'scores'`, `'logfoldchanges'`, or other valid column names).        |
 
 ## Return type
 

@@ -25,14 +25,14 @@ Identifies and clusters gene interaction modules within a specified group using 
 
 | Name          | Type            | Description                                                                                  |
 |---------------|-----------------|----------------------------------------------------------------------------------------------|
-| target_group     | str             | The group label to analyze within the data.                                                  |
+| target_group     | str             | The group label to analyze within the data.                                               |
 | layer         | str, optional   | The data layer to use for calculations (default: `'log1p'`).                                 |
-| method        | str, optional   | Method for interaction calculation (default: `'pos_coexp'`).                                      |
+| method        | str, optional   | Method for interaction calculation (default: `'pos_coexp'`).                                 |
 | test_type     | str, optional   | Type of statistical test to use (default: `'TER'`).                                          |
 | interactions  | list, optional  | List of interaction names to analyze. If `None`, uses all available interactions.            |
 | unit_header   | str, optional   | Column in `obs` to use as the unit identifier (default: `'subject'`).                        |
 | out_dir       | str, optional   | Output directory for saving results. If `None`, uses the class's `out_dir` attribute.        |
-| label_df      | pd.DataFrame, optional | DataFrame for custom labels. If `None`, labels are generated automatically.         |
+| label_df      | pd.DataFrame, optional | DataFrame for custom labels. If `None`, labels are generated automatically.           |
 | n_neighbors   | int, optional   | Number of neighbors for clustering (default: `10`).                                          |
 | strategy      | str, optional   | Clustering strategy to use (default: `'bottom_up'`).                                         |
 
