@@ -64,4 +64,5 @@ BibTeX format:
 
 <div style="display:none;">
 <script type='text/javascript' id='clustrmaps' src='//cdn.clustrmaps.com/map_v2.js?cl=ffffff&w=a&t=n&d=aehrmM5iUrNweGVMgYWen6iLrg21PDipO7L_XllJ1lo&co=2d78ad&cmo=3acc3a&cmn=ff5353&ct=ffffff'></script>
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "aec36b862a47431a979dc263a1f98d74"}'></script>
 </div>

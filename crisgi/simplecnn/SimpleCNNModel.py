@@ -62,4 +62,4 @@ class SimpleCNNModel:
     def save(self, ae_path, mlp_path):
         torch.save(self.ae.state_dict(), ae_path)
         torch.save(self.mlp.state_dict(), mlp_path)
-        print(f"✅ Models saved to:\n - {ae_path}\n - {mlp_path}")
+        print(f"Models saved to:\n - {ae_path}\n - {mlp_path}")
