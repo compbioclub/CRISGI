@@ -22,19 +22,19 @@ Performs network analysis on the dataset using specified parameters and interact
 
 | Name          | Type            | Description                                                                                   |
 |---------------|-----------------|-----------------------------------------------------------------------------------------------|
-| target_group     | str             | The group identifier for which the network analysis is performed.                             |
-| layer         | str, optional   | The data layer to use for analysis (default: `'log1p'`).                                     |
-| method        | str, optional   | The method for interaction calculation (default: `'prod'`).                                  |
-| test_type     | str, optional   | The statistical test type to use (default: `'TER'`).                                         |
-| interactions  | list, optional  | List of interaction features to include; if `None`, uses default from `edata.uns`.           |
-| unit_header   | str, optional   | The header indicating the unit of analysis (default: `'subject'`).                           |
-| out_dir       | str, optional   | Output directory for results; if `None`, results are not saved to disk.                      |
-| n_neighbors   | int, optional   | Number of neighbors to consider in the analysis (default: `10`).                             |
-| strategy      | str, optional   | Strategy for network construction (default: `'bottom_up'`).                                  |
+| target_group  | str             | The group identifier for which the network analysis is performed.                             |
+| layer         | str, optional   | The data layer to use for analysis (default: `'log1p'`).                                      |
+| method        | str, optional   | The method for interaction calculation (default: `'prod'`).                                   |
+| test_type     | str, optional   | The statistical test type to use (default: `'TER'`).                                          |
+| interactions  | list, optional  | List of interaction features to include; if `None`, uses default from `edata.uns`.            |
+| unit_header   | str, optional   | The header indicating the unit of analysis (default: `'subject'`).                            |
+| out_dir       | str, optional   | Output directory for results; if `None`, results are not saved to disk.                       |
+| n_neighbors   | int, optional   | Number of neighbors to consider in the analysis (default: `10`).                              |
+| strategy      | str, optional   | Strategy for network construction (default: `'bottom_up'`).                                   |
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

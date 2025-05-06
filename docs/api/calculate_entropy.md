@@ -16,17 +16,17 @@ Calculates the entropy changes of gene-gene interactions between a reference gro
 
 ## Parameters
 
-| Name      | Type            | Description                                                                                   |
+| Name      | Type            | Description                                                                                  |
 |-----------|-----------------|----------------------------------------------------------------------------------------------|
 | ref_obs   | list or array   | List of observation (cell) identifiers for the reference group.                              |
-| test_obss  | list of lists   | List of test population, each a list of observation (cell) identifiers.                  |
+| test_obss  | list of lists   | List of test population, each a list of observation (cell) identifiers.                     |
 | groupby   | str             | The column name in `obs` used to group observations (e.g., experimental condition, batch).   |
 | ref_time  | str or int      | Reference time point or label, used for naming output layers.                                |
-| layer     | str, optional   | Name of the data layer in AnnData to use for calculations (default: `'log1p'`).             |
+| layer     | str, optional   | Name of the data layer in AnnData to use for calculations (default: `'log1p'`).              |
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

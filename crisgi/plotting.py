@@ -11,7 +11,7 @@ from crisgi.util import set_adata_obs, print_msg
 
 def interaction_score_boxplot(crisgi_obj, groupby=None, 
                            interaction_type='common_TER',
-                           method='pearson',
+                           method='prod',
                            title=''):
     edata = crisgi_obj.edata
     df = edata.obs.copy()
@@ -83,7 +83,7 @@ def investigate_interaction(crisgi_obj, interaction, groupby='group',
     plt.show()
 
 
-def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="pearson", test_type="TER",
+def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="prod", test_type="TER",
                     p_adjust=True, p_cutoff=0.05, n_top_pathway=10, n_top_interactions=500,
                     # Available options for piority_term: None, list of terms(specific pathway names)
                     piority_term=None,
@@ -174,7 +174,7 @@ def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="pearson",
 
         
 def draw_gene_network(crisgi_obj, target_group,
-                      method='pearson', test_type='TER',
+                      method='prod', test_type='TER',
                       n_top_interactions=100, rdf=None,
                     cmap='viridis'):
     net = Network(notebook=True, height='1000px', width='1000px', cdn_resources='in_line')

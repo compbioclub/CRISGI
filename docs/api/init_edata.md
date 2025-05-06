@@ -10,14 +10,14 @@ Initializes the `edata` attribute for the object by extracting and organizing ob
 
 ## Parameters
 
-| Name      | Type            | Description                                                                 |
-|-----------|-----------------|-----------------------------------------------------------------------------|
-| test_obss  | list of list    | A list where each element is a list of observation indices or labels to include (test populations). |
-| headers   | list of str     | List of column names from the observation metadata to retain in `edata.obs`.   |
+| Name      | Type            | Description                                                                  |
+|-----------|-----------------|------------------------------------------------------------------------------|
+| test_obss | list of list    | A list where each element is a list of observation indices or labels to include (test populations). |
+| headers   | list of str     | List of column names from the observation metadata to retain in `edata.obs`. |
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

@@ -5,7 +5,7 @@ from crisgi.logistic.LogisticModel import LogisticModel
 import scanpy as sc
 import anndata as ad
 from scipy.sparse import csr_matrix, coo_matrix
-from scipy.stats import spearmanr, ttest_1samp, wilcoxon
+from scipy.stats import ttest_1samp, wilcoxon
 from pyseat.SEAT import SEAT
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -261,30 +261,6 @@ class CRISGI():
         adata.var['std'] = std.reshape(-1)
 
     # CRISGI
-    def _pearsonr(self, adata):
-        self._scale(adata)
-        X = get_array(adata, layer='scale')
-        R = np.dot(X.T, X)/X.shape[1]
-        return R
-
-    # CRISGI
-    def _interaction_score(self, adata, method):
-        X = get_array(adata, layer='log1p')
-        self._std(adata)
-
-        if 'pearson' == method:  # split pos and neg in the future
-            R = self._pearsonr(adata) # faster
-            #R = np.corrcoef(X.T)
-        if 'spearman' == method: # include p-val
-            R = spearmanr(X).statistic
-        if 'prod' == method:
-            R = np.dot(X.T, X)/X.shape[0]
-        if 'neg_coexp' == method:
-            R = np.dot(X.T, X.max() - X)/X.shape[0]
-        print_msg(f'{method} size {R.shape} min { R.min()} max {R.max()}')
-        return R
-
-    # CRISGI
     def test_DER(self, groupby, target_group=None, test_method="wilcoxon", method='prod'):
         mytarget_group = target_group
         groups = self.adata.obs[groupby].unique()
@@ -404,7 +380,7 @@ class CRISGI():
                't_statistic': t_statistic, 'p_value': p_value}
         return res
 
-    def cohort_level_top_n_ORA(self,n_top_interactions=None, n_space=10,method='prod',gene_sets=['KEGG_2021_Human',
+    def cohort_level_top_n_ORA(self,n_top_interactions=None,method='prod',gene_sets=['KEGG_2021_Human',
                                       'GO_Molecular_Function_2023', 
                                       'GO_Cellular_Component_2023', 
                                       'GO_Biological_Process_2023',
@@ -414,28 +390,19 @@ class CRISGI():
         df = self.edata.to_df()
         interaction_score_sum = df.sum(axis=0).to_dict()
         interaction_list = list(interaction_score_sum.keys())
-        enr_dict = {}
-        df_list = []
 
         if n_top_interactions is None:
             n_top_interactions = len(interaction_list)
 
-        for top_n in range(10, n_top_interactions + 1, n_space):
-            try:
-                top_n, enr, enrich_df = self._enrich_for_top_n(top_n, interaction_list, gene_sets, organism, background)
-                enr_dict[top_n] = enr
-                df_list.append(enrich_df)
-            except Exception as exc:
-                print(f'Top_n {top_n} generated an exception: {exc}')
+        top_n, enr, enrich_df = self._enrich_for_top_n(n_top_interactions, interaction_list, gene_sets, organism, background)
 
-        final_df = pd.concat(df_list)
         fn = f'{self.out_dir}/{method}_cohort_enrich.csv'
-        final_df.to_csv(fn, index=False)
+        enrich_df.to_csv(fn, index=False)
 
         print_msg(f'[Output] The {method} cohort-level enrich statistics are saved to:\n{fn}')
     
-        self.edata.uns[f'{method}_cohort_enrich_res'] = enr_dict
-        self.edata.uns[f'{method}_cohort_enrich_df'] = final_df
+        self.edata.uns[f'{method}_cohort_enrich_res'] = enr
+        self.edata.uns[f'{method}_cohort_enrich_df'] = enrich_df
                 
 
     # CRISGI

@@ -43,9 +43,11 @@ Initializes a CRISGI object for single-cell gene interaction analysis. Sets up t
 | out_dir             | str             | Output directory for results (default: './out').                                             |
 
 ### Return type
-None
+
+`None`
 
 ### Returns
+
 Initializes the CRISGI object and prepares it for downstream analysis.
 
 ### Attributes Set
@@ -100,20 +102,22 @@ Initializes a CRISGITime object for time-series or temporal single-cell gene int
 
 ### Parameters
 
-| Name        | Type     | Description                                                                 |
-|-------------|----------|-----------------------------------------------------------------------------|
-| adata       | AnnData  | The annotated data matrix (cells x genes) to be analyzed.                   |
-| device      | str      | Device to use for computation ('cpu' or 'cuda', default: 'cpu').            |
-| model_type  | str      | Model type to use ('cnn', 'simple_cnn', 'logistic', default: 'cnn').        |
-| ae_path     | str/None | Path to autoencoder model weights (optional).                               |
-| mlp_path    | str/None | Path to MLP model weights (optional).                                       |
-| model_path  | str/None | Path to logistic model weights (optional).                                  |
-| **kwargs    | dict     | Additional keyword arguments passed to CRISGI.__init__.                     |
+| Name        | Type     | Description                                                                  |
+|-------------|----------|------------------------------------------------------------------------------|
+| adata       | AnnData  | The annotated data matrix (cells x genes) to be analyzed.                    |
+| device      | str      | Device to use for computation (`'cpu'` or `'cuda'`, default: `'cpu'`).       |
+| model_type  | str      | Model type to use (`'cnn'`, `'simple_cnn'`, `'logistic'`, default: `'cnn'`). |
+| ae_path     | str/None | Path to autoencoder model weights (optional).                                |
+| mlp_path    | str/None | Path to MLP model weights (optional).                                        |
+| model_path  | str/None | Path to logistic model weights (optional).                                   |
+| **kwargs    | dict     | Additional keyword arguments passed to CRISGI.__init__.                      |
 
 ### Return type
-None
+
+`None`
 
 ### Returns
+
 Initializes the CRISGITime object and sets up the selected model for downstream analysis.
 
 ### Attributes Set
