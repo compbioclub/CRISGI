@@ -17,7 +17,7 @@ Initializes the `edata` attribute for the object by extracting and organizing ob
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

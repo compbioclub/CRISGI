@@ -21,18 +21,18 @@ Performs pathway enrichment analysis at the phenotype level using the top-N accu
 
 ## Parameters
 
-| Name               | Type                | Description                                                                                                    |
-|--------------------|---------------------|----------------------------------------------------------------------------------------------------------------|
-| `target_group`     | str                 | Target group for enrichment analysis (e.g., phenotype or cluster name).                                        |
-| `method`           | str, optional       | Correlation method used for analysis. Default is `"pos_coexp"`.                                                |
-| `test_type`        | str, optional       | Type of statistical test. Default is `"TER"`.                                                                  |
-| `p_adjust`         | bool, optional      | Whether to use adjusted p-values for filtering. Default is `True`.                                             |
-| `p_cutoff`         | float, optional     | P-value cutoff for significance filtering. Default is `0.05`.                                                  |
-| `n_top_pathway`    | int, optional       | Number of top pathways to display in the heatmap. Default is `10`.                                             |
-| `n_top_interactions`| int, optional      | Maximum number of top interactions (gene sets) to consider. Default is `500`.                                  |
-| `piority_term`     | list or None, optional | List of pathway terms to prioritize or `None` for no prioritization. Default is `None`.                     |
-| `eval_para`        | str, optional       | Evaluation parameter for ranking pathways. Options: `'top_n_ratio'`, `'overlap_ratio'`, `'P-value'`, `'Adjusted P-value'`, `'Odds Ratio'`, `'Combined Score'`, `'-logP'`. Default is `'top_n_ratio'`. |
-| `dataset_name`     | str or None, optional | Name of the dataset for labeling outputs. Default is `None`.                                                 |
+| Name                | Type                | Description                                                                                                    |
+|---------------------|---------------------|----------------------------------------------------------------------------------------------------------------|
+| `target_group`      | str                 | Target group for enrichment analysis (e.g., phenotype or cluster name).                                        |
+| `method`            | str, optional       | Correlation method used for analysis. Default is `"pos_coexp"`.                                                |
+| `test_type`         | str, optional       | Type of statistical test. Default is `"TER"`.                                                                  |
+| `p_adjust`          | bool, optional      | Whether to use adjusted p-values for filtering. Default is `True`.                                             |
+| `p_cutoff`          | float, optional     | P-value cutoff for significance filtering. Default is `0.05`.                                                  |
+| `n_top_pathway`     | int, optional       | Number of top pathways to display in the heatmap. Default is `10`.                                             |
+| `n_top_interactions`| int, optional       | Maximum number of top interactions (gene sets) to consider. Default is `500`.                                  |
+| `piority_term`      | list or None, optional | List of pathway terms to prioritize or `None` for no prioritization. Default is `None`.                     |
+| `eval_para`         | str, optional       | Evaluation parameter for ranking pathways. Options: `'top_n_ratio'`, `'overlap_ratio'`, `'P-value'`, `'Adjusted P-value'`, `'Odds Ratio'`, `'Combined Score'`, `'-logP'`. Default is `'top_n_ratio'`. |
+| `dataset_name`      | str or None, optional | Name of the dataset for labeling outputs. Default is `None`.                                                 |
 
 ## Return type
 

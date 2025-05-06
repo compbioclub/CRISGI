@@ -42,7 +42,7 @@ Performs gene set enrichment analysis (GSEA) on ranked gene interactions between
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

@@ -32,7 +32,7 @@ Identifies and analyzes the overlap between the top N differential features (e.g
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

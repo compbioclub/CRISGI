@@ -12,11 +12,11 @@ Generates predictions using the trained model on the provided data loader. This 
 
 ## Parameters
 
-| Name         | Type        | Description                                                                 |
-|--------------|-------------|-----------------------------------------------------------------------------|
-| train_loader | DataLoader  | The data loader containing the training dataset.                            |
-| epochs       | int, optional | Number of training epochs (used for non-logistic models). Default is 10.  |
-| data_loader  | DataLoader  | The data loader containing the data for which predictions are to be made.   |
+| Name         | Type        | Description                                                                  |
+|--------------|-------------|------------------------------------------------------------------------------|
+| train_loader | DataLoader  | The data loader containing the training dataset.                             |
+| epochs       | int, optional | Number of training epochs (used for non-logistic models). Default is `10`. |
+| data_loader  | DataLoader  | The data loader containing the data for which predictions are to be made.    |
 
 ---
 

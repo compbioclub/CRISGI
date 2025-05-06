@@ -26,14 +26,14 @@ Performs survival analysis using Kaplan-Meier estimators and log-rank tests for 
 | interactions   | list or None    | List of interaction features to include; if None, uses default from `edata.uns`.             |
 | groupbys       | list            | Additional columns in `obs` to group data by, in addition to score group.                    |
 | survival_types | list            | List of survival types to analyze (e.g., `['os', 'pfs']`).                                   |
-| time_unit      | str             | Label for the time axis in plots (e.g., 'months', 'days').                                   |
-| test_type      | str             | Type of statistical test to use (default: 'TER').                                            |
-| method         | str             | Method for entropy calculation (default: 'pos_coexp').                                       |
+| time_unit      | str             | Label for the time axis in plots (e.g., `'months'`, `'days'`).                               |
+| test_type      | str             | Type of statistical test to use (default: `'TER'`).                                          |
+| method         | str             | Method for entropy calculation (default: `'pos_coexp'`).                                     |
 | title          | str             | Title prefix for the generated plots.                                                        |
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

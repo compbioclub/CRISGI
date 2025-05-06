@@ -22,7 +22,7 @@ Performs network analysis on the dataset using specified parameters and interact
 
 | Name          | Type            | Description                                                                                   |
 |---------------|-----------------|-----------------------------------------------------------------------------------------------|
-| target_group     | str             | The group identifier for which the network analysis is performed.                          |
+| target_group  | str             | The group identifier for which the network analysis is performed.                             |
 | layer         | str, optional   | The data layer to use for analysis (default: `'log1p'`).                                      |
 | method        | str, optional   | The method for interaction calculation (default: `'pos_coexp'`).                              |
 | test_type     | str, optional   | The statistical test type to use (default: `'TER'`).                                          |
@@ -34,7 +34,7 @@ Performs network analysis on the dataset using specified parameters and interact
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

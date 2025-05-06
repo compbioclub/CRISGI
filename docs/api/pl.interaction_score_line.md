@@ -34,7 +34,7 @@ Generates and plots a line chart of interaction scores (entropy-based) for a spe
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

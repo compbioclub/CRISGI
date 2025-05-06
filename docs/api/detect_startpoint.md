@@ -16,7 +16,7 @@ Detects the start point (CT_time) for samples with specified symptom types and u
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

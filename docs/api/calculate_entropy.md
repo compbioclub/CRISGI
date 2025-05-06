@@ -26,7 +26,7 @@ Calculates the entropy changes of gene-gene interactions between a reference gro
 
 ## Return type
 
-None
+`None`
 
 ## Returns
 

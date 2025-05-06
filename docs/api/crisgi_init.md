@@ -10,17 +10,17 @@ The `CRISGI` class initializes and preprocesses gene expression data for downstr
 |------------------------|-----------------|-----------------------------------------------------------------------------------------------|
 | `adata`                | AnnData         | Annotated data matrix (cells × genes) to be analyzed.                                         |
 | `bg_net`               | array or None   | Optional. Precomputed background network matrix.                                              |
-| `bg_net_score_cutoff`  | int             | Score threshold for filtering background network edges. Default is 850.                       |
+| `bg_net_score_cutoff`  | int             | Score threshold for filtering background network edges. Default is `850`.                     |
 | `genes`                | list or None    | Optional. List of gene names to include in the analysis.                                      |
-| `n_hvg`                | int or None     | Number of highly variable genes to select. Default is 5000.                                   |
-| `n_pcs`                | int             | Number of principal components for dimensionality reduction. Default is 30.                   |
+| `n_hvg`                | int or None     | Number of highly variable genes to select. Default is `5000`.                                 |
+| `n_pcs`                | int             | Number of principal components for dimensionality reduction. Default is `30`.                 |
 | `interactions`         | array or None   | Optional. Predefined gene-gene interactions to use for background network construction.       |
-| `n_threads`            | int             | Number of threads to use for computation. Default is 5.                                       |
+| `n_threads`            | int             | Number of threads to use for computation. Default is `5`.                                     |
 | `interaction_methods`  | list            | List of methods for inferring gene interactions. Default: `['pearson', 'spearman', 'pos_coexp', 'neg_coexp']`. |
-| `organism`             | str             | Organism name (e.g., 'human'). Default is 'human'.                                            |
-| `class_type`           | str             | Type of classification task (e.g., 'time'). Default is 'time'.                                |
-| `dataset`              | str             | Dataset identifier. Default is 'test'.                                                        |
-| `out_dir`              | str             | Output directory for results. Default is './out'.                                             |
+| `organism`             | str             | Organism name (e.g., `'human'`). Default is `'human'`.                                        |
+| `class_type`           | str             | Type of classification task (e.g., `'time'`). Default is `'time'`.                            |
+| `dataset`              | str             | Dataset identifier. Default is `'test'`.                                                      |
+| `out_dir`              | str             | Output directory for results. Default is `'./out'`.                                           |
 
 ## Return Type
 
