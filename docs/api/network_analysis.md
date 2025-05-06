@@ -4,7 +4,7 @@
 
 ```python
 crisgi_obj.network_analysis(
-    per_group,
+    target_group,
     layer="log1p",
     method="prod",
     test_type="TER",
@@ -22,7 +22,7 @@ Performs network analysis on the dataset using specified parameters and interact
 
 | Name          | Type            | Description                                                                                   |
 |---------------|-----------------|-----------------------------------------------------------------------------------------------|
-| per_group     | str             | The group identifier for which the network analysis is performed.                             |
+| target_group     | str             | The group identifier for which the network analysis is performed.                             |
 | layer         | str, optional   | The data layer to use for analysis (default: `'log1p'`).                                     |
 | method        | str, optional   | The method for interaction calculation (default: `'prod'`).                                  |
 | test_type     | str, optional   | The statistical test type to use (default: `'TER'`).                                         |
@@ -51,12 +51,12 @@ This function does not return a value. It performs network analysis and may prin
 # Assume `crisgi` is an instance of the CRISGI class
 
 # Perform network analysis for group 'A' with default settings
-crisgi.network_analysis(per_group='A')
+crisgi.network_analysis(target_group='A')
 
 # Perform network analysis with custom interactions and output directory
 custom_interactions = ['gene1', 'gene2', 'gene3']
 crisgi.network_analysis(
-    per_group='B',
+    target_group='B',
     interactions=custom_interactions,
     out_dir='/path/to/output',
     n_neighbors=15,

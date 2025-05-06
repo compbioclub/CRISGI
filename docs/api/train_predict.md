@@ -55,7 +55,7 @@ from src.logistic.LogisticModel import LogisticModel
 from src.util import ImageDataset
 import src.plotting_sniee_time as pl
 
-crisgi_obj = pickle.load(open("data/flu_prod/GSE30550_H3N2_crisgi_obj.pk", 'rb'))
+crisgi_obj = pickle.load(open("data/GSE30550_H3N2_crisgi_obj.pk", 'rb'))
 
 # Set up the training data loader
 transform = transforms.Compose([

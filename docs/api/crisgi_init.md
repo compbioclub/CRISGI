@@ -16,7 +16,7 @@ The `CRISGI` class initializes and preprocesses gene expression data for downstr
 | `n_pcs`                | int             | Number of principal components for dimensionality reduction. Default is 30.                   |
 | `interactions`         | array or None   | Optional. Predefined gene-gene interactions to use for background network construction.       |
 | `n_threads`            | int             | Number of threads to use for computation. Default is 5.                                       |
-| `interaction_methods`  | list            | List of methods for inferring gene interactions. Default: `['pearson', 'spearman', 'pos_coexp', 'neg_coexp']`. |
+| `interaction_methods`  | list            | List of methods for inferring gene interactions. Default: `['prod']`. |
 | `organism`             | str             | Organism name (e.g., 'human'). Default is 'human'.                                            |
 | `class_type`           | str             | Type of classification task (e.g., 'time'). Default is 'time'.                                |
 | `dataset`              | str             | Dataset identifier. Default is 'test'.                                                        |

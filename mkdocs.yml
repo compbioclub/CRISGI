@@ -2,14 +2,66 @@ site_name: CRISGI
 site_url: https://compbioclub.github.io/CRISGI
 theme:
   name: "material"
+  features:
+    - search.suggest
+    - search.highlight
+    - search.share\
+    # - navigation.footer
+  palette: 
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-sunny 
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      # primary: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+
+extra:
+  homepage: https://compbioclub.github.io/CRISGI/
+  social:
+    - icon: fontawesome/brands/github
+      link: https://compbioclub.github.io/CRISGI/
+
+copyright: Copyright &copy; 2025 LVCS
+
+repo_url: https://github.com/compbioclub/CRISGI
+repo_name: CRISGI
+
+plugins:
+  - mknotebooks:
+      encoding: 'utf-8'
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+  - search
+
+extra:
+  encoding: 'utf-8'
+
+markdown_extensions:
+- admonition
+- codehilite
+- pymdownx.superfences
 
 nav:
   - 🏠 Home: index.md
   - 📥 Installation: installation.md
   - 📖 Tutorial: 
       - tutorial.md
-      - tutorial/gse30550.md
-      - tutorial/covid.md
+      - Influenza A Bulk RNA-seq Data: tutorial/gse30550.ipynb
   - 📚 API:
       - api_reference.md
       - api/calculate_entropy.md

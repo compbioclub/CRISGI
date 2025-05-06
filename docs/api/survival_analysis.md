@@ -5,7 +5,7 @@
 ```python
 crisgi_obj.survival_analysis(
     ref_group,
-    per_group,
+    target_group,
     interactions=None,
     groupbys=[],
     survival_types=['os', 'pfs'],
@@ -21,8 +21,8 @@ Performs survival analysis using Kaplan-Meier estimators and log-rank tests for 
 
 | Name           | Type            | Description                                                                                  |
 |----------------|-----------------|----------------------------------------------------------------------------------------------|
-| ref_group      | str             | Reference group name used for entropy calculation.                                            |
-| per_group      | str             | Comparison group name for analysis.                                                          |
+| ref_group      | str             | Reference group name used for entropy calculation.                                           |
+| target_group   | str             | Comparison group name for analysis.                                                          |
 | interactions   | list or None    | List of interaction features to include; if None, uses default from `edata.uns`.             |
 | groupbys       | list            | Additional columns in `obs` to group data by, in addition to score group.                    |
 | survival_types | list            | List of survival types to analyze (e.g., `['os', 'pfs']`).                                   |
@@ -52,7 +52,7 @@ This function does not return a value. It generates and saves survival plots for
 # Perform survival analysis comparing 'control' and 'treatment' groups
 crisgi.survival_analysis(
     ref_group='control',
-    per_group='treatment',
+    target_group='treatment',
     interactions=['geneA', 'geneB'],
     groupbys=['batch'],
     survival_types=['os'],

@@ -4,7 +4,7 @@
 
 ```python
 crisgi_obj.test_TER(
-    per_group=None, 
+    target_group=None, 
     p_cutoff=0.05, 
     method="prod", 
     groups=None
@@ -15,9 +15,9 @@ Identifies Trend Expressed Interactions (TER) for each group in the dataset. Thi
 
 ## Parameters
 
-| Name        | Type           | Description                                                                                 |
+| Name        | Type           | Description                                                                                |
 |-------------|----------------|--------------------------------------------------------------------------------------------|
-| per_group   | str or None    | Specific group to analyze. If `None`, all groups in `groups` are processed.                |
+| target_group | str or None   | Specific group to analyze. If `None`, all groups in `groups` are processed.                |
 | p_cutoff    | float          | P-value cutoff for statistical significance (default: 0.05).                               |
 | method      | str            | Method used for interaction analysis (e.g., `'prod'`).                                     |
 | groups      | list or None   | List of groups to analyze. If `None`, uses `self.groups`.                                  |
@@ -32,8 +32,8 @@ This function does not return a value. It saves TER results and statistics to th
 
 ## Attributes Set
 
-- `edata.uns[f'{method}_{self.groupby}_{per_group}_TER']`: List of filtered interactions identified as TER.
-- `edata.uns[f'{method}_{self.groupby}_{per_group}_TER_df']`: DataFrame containing detailed TER statistics for each interaction.
+- `edata.uns[f'{method}_{self.groupby}_{target_group}_TER']`: List of filtered interactions identified as TER.
+- `edata.uns[f'{method}_{self.groupby}_{target_group}_TER_df']`: DataFrame containing detailed TER statistics for each interaction.
 
 ## Example
 
@@ -44,7 +44,7 @@ This function does not return a value. It saves TER results and statistics to th
 crisgi.test_TER()
 
 # Run TER analysis for a specific group with a custom p-value cutoff
-crisgi.test_TER(per_group='GroupA', p_cutoff=0.01)
+crisgi.test_TER(target_group='GroupA', p_cutoff=0.01)
 
 # Run TER analysis for a custom list of groups and a different method
 custom_groups = ['GroupA', 'GroupB']

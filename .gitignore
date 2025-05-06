@@ -1,8 +1,8 @@
-data
 *pyc
 *.gz
-*.ipynb
 .DS_Store
-*.png
 *.html
-
+.vscode
+out
+build
+*.egg-info

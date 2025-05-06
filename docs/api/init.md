@@ -14,7 +14,7 @@ __init__(
     n_pcs=30,
     interactions=None,
     n_threads=5,
-    interaction_methods=["pearson", "spearman", "pos_coexp", "neg_coexp"],
+    interaction_methods=["prod"],
     organism="human",
     class_type="time",
     dataset="test",
@@ -36,7 +36,7 @@ Initializes a CRISGI object for single-cell gene interaction analysis. Sets up t
 | n_pcs               | int             | Number of principal components for PCA (default: 30).                                        |
 | interactions        | Optional        | Predefined gene interactions (default: None).                                                |
 | n_threads           | int             | Number of threads to use for computation (default: 5).                                       |
-| interaction_methods | list            | Methods for interaction inference (default: ['pearson', 'spearman', 'pos_coexp', 'neg_coexp']). |
+| interaction_methods | list            | Methods for interaction inference (default: ["prod"]).                                       |
 | organism            | str             | Organism name (default: 'human').                                                            |
 | class_type          | str             | Type of analysis class (default: 'time').                                                    |
 | dataset             | str             | Dataset identifier (default: 'test').                                                        |
@@ -69,6 +69,7 @@ from crisgi import CRISGI
 adata = sc.read_h5ad('example_data.h5ad')
 crisgi = CRISGI(
     adata,
+    interaction_methods=["prod"],
     n_hvg=3000,
     n_pcs=20,
     organism='human',
@@ -131,6 +132,7 @@ from crisgi import CRISGITime
 adata = sc.read_h5ad('example_data.h5ad')
 crisgi_time = CRISGITime(
     adata,
+    interaction_methods=["prod"],
     device='cuda',
     model_type='cnn',
     out_dir='./crisgi_time_results'

@@ -31,8 +31,8 @@ Performs gene set enrichment analysis (GSEA) on ranked gene interactions between
 |--------------------|-----------------|----------------------------------------------------------------------------------------------|
 | `ref_group`        | `str`           | Reference group name for comparison.                                                         |
 | `target_group`     | `str`           | Comparison group name.                                                                       |
-| `sortby`           | `str`           | Column name to sort interactions by (default: `'pvals_adj'`).                               |
-| `n_top_interactions` | `int or None` | Number of top interactions to include (default: all).                                       |
+| `sortby`           | `str`           | Column name to sort interactions by (default: `'pvals_adj'`).                                |
+| `n_top_interactions` | `int or None` | Number of top interactions to include (default: all).                                        |
 | `gene_sets`        | `list of str`   | List of gene set libraries to use for enrichment analysis.                                   |
 | `prefix`           | `str`           | Prefix for output directory and files.                                                       |
 | `min_size`         | `int`           | Minimum size of gene sets to include in analysis.                                            |

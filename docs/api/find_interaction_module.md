@@ -4,7 +4,7 @@
 
 ```python
 find_interaction_module(
-    per_group,
+    target_group,
     layer='log1p',
     method='prod',
     test_type='TER',
@@ -25,7 +25,7 @@ Identifies and clusters gene interaction modules within a specified group using 
 
 | Name          | Type            | Description                                                                                  |
 |---------------|-----------------|----------------------------------------------------------------------------------------------|
-| per_group     | str             | The group label to analyze within the data.                                                  |
+| target_group     | str             | The group label to analyze within the data.                                                  |
 | layer         | str, optional   | The data layer to use for calculations (default: `'log1p'`).                                 |
 | method        | str, optional   | Method for interaction calculation (default: `'prod'`).                                      |
 | test_type     | str, optional   | Type of statistical test to use (default: `'TER'`).                                          |
@@ -65,7 +65,7 @@ A DataFrame indexed by interaction names, containing the assigned community and 
 # Assume `crisgi` is an instance of CRISGI with loaded data
 
 result_df = crisgi.find_interaction_module(
-    per_group='GroupA',
+    target_group='GroupA',
     layer='log1p',
     method='prod',
     test_type='TER',
