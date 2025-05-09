@@ -1,1 +1,1 @@
-from .crisgi import CRISGITime
+from .crisgi import CRISGITime, CRISGI
