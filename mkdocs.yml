@@ -3,6 +3,7 @@ site_url: https://compbioclub.github.io/CRISGI
 theme:
   name: "material"
   features:
+    - content.code.copy
     - search.suggest
     - search.highlight
     - search.share\
@@ -28,10 +29,13 @@ theme:
         name: Switch to light mode
 
 extra:
-  homepage: https://compbioclub.github.io/CRISGI/
+  homepage:
   social:
+    - icon: fontawesome/solid/house
+      link: https://compbio.club
     - icon: fontawesome/brands/github
       link: https://compbioclub.github.io/CRISGI/
+  encoding: 'utf-8'
 
 copyright: Copyright &copy; 2025 LVCS
 
@@ -48,8 +52,12 @@ plugins:
             docstring_style: numpy
   - search
 
-extra:
-  encoding: 'utf-8'
+extra_css:
+  - css/custom.css
+
+extra_javascript:
+  - js/tablesort.min.js
+  - js/sort-init.js 
 
 markdown_extensions:
 - admonition
