@@ -21,6 +21,7 @@ from gseapy import gseaplot
 import pymannkendall as mk
 from multiprocessing import Pool
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from collections import Counter
 import warnings
 
 from crisgi.startpoint_detection import detect_start_point
@@ -380,16 +381,21 @@ class CRISGI():
                't_statistic': t_statistic, 'p_value': p_value}
         return res
 
-    def cohort_level_top_n_ORA(self,n_top_interactions=None,method='prod',gene_sets=['KEGG_2021_Human',
-                                      'GO_Molecular_Function_2023', 
-                                      'GO_Cellular_Component_2023', 
-                                      'GO_Biological_Process_2023',
-                                      'MSigDB_Hallmark_2020'],
-                           background=None,
-                           organism='human', plot=True):
+    def cohort_level_top_n_ORA(self,n_top_interactions=None,top_percentage=0.05,method='prod',
+                               gene_sets=['KEGG_2021_Human',
+                                        'GO_Molecular_Function_2023', 
+                                        'GO_Cellular_Component_2023', 
+                                        'GO_Biological_Process_2023',
+                                        'MSigDB_Hallmark_2020'],
+                                background=None,
+                                organism='human', plot=True):
         df = self.edata.to_df()
-        interaction_score_sum = df.sum(axis=0).sort_values(ascending=False)
-        interaction_list = interaction_score_sum.index.tolist()
+        top_interactions_counts = []
+        for idx in df.index:
+            top_interactions_counts.extend(df.loc[idx].sort_values(ascending=False).head(int(len(df.columns)*top_percentage)).index.tolist())
+        top_interactions_counts = Counter(top_interactions_counts)
+        self.edata.uns[f'top_interactions_count'] = dict(top_interactions_counts)
+        interaction_list = list(top_interactions_counts.keys())
 
         if n_top_interactions is None:
             n_top_interactions = len(interaction_list)

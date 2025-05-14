@@ -5,6 +5,7 @@
 ```python
 crisgi_obj.cohort_level_top_n_ORA(
     n_top_interactions=None,
+    top_percentage=0.05,
     method='prod',
     gene_sets=[
         'KEGG_2021_Human',
@@ -19,13 +20,14 @@ crisgi_obj.cohort_level_top_n_ORA(
 )
 ```
 
-Performs cohort-level over-representation analysis (ORA) for the top N interactions in the dataset, across multiple gene sets. The function iteratively analyzes the enrichment of gene sets for increasing numbers of top interactions, saves the results to a CSV file, and stores the enrichment results in the object's attributes.
+Performs cohort-level over-representation analysis (ORA) for the top-*n* interactions in the dataset, across multiple samples. This method filters the interactions based on two criteria: the percentage of top interactions for each sample and the number of top ineractions ranking across the occurrences. It then performs enrichment analysis using the specified gene sets and method.
 
 ## Parameters
 
 | Name                | Type      | Description                                                                                   |
 |---------------------|-----------|-----------------------------------------------------------------------------------------------|
 | n_top_interactions  | int, optional | Number of top interactions to consider. If None, uses all available interactions.         |
+| top_percentage      | float, optional | Percentage of top interactions to consider. Default is `0.05`, meaning 5% of interactions. |
 | method              | str, optional | Method used for scoring interactions (e.g., `'prod'`). Default is `'prod'`.               |
 | gene_sets           | list of str, optional | List of gene set names to use for enrichment analysis. Default includes several common sets. |
 | background          | list or None, optional | Background gene set for enrichment. If None, uses all genes in the dataset.      |
