@@ -388,8 +388,8 @@ class CRISGI():
                            background=None,
                            organism='human', plot=True):
         df = self.edata.to_df()
-        interaction_score_sum = df.sum(axis=0).to_dict()
-        interaction_list = list(interaction_score_sum.keys())
+        interaction_score_sum = df.sum(axis=0).sort_values(ascending=False)
+        interaction_list = interaction_score_sum.index.tolist()
 
         if n_top_interactions is None:
             n_top_interactions = len(interaction_list)
