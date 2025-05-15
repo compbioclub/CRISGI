@@ -393,9 +393,9 @@ class CRISGI():
         top_interactions_counts = []
         for idx in df.index:
             top_interactions_counts.extend(df.loc[idx].sort_values(ascending=False).head(int(len(df.columns)*top_percentage)).index.tolist())
-        top_interactions_counts = Counter(top_interactions_counts)
+        top_interactions_counts = Counter(top_interactions_counts).most_common()
         self.edata.uns[f'top_interactions_count'] = dict(top_interactions_counts)
-        interaction_list = list(top_interactions_counts.keys())
+        interaction_list = list(dict(top_interactions_counts).keys())
 
         if n_top_interactions is None:
             n_top_interactions = len(interaction_list)
