@@ -389,10 +389,11 @@ class CRISGI():
                                         'MSigDB_Hallmark_2020'],
                                 background=None,
                                 organism='human', plot=True):
-        df = self.edata.to_df()
-        top_interactions_counts = []
-        for idx in df.index:
-            top_interactions_counts.extend(df.loc[idx].sort_values(ascending=False).head(int(len(df.columns)*top_percentage)).index.tolist())
+        data = self.edata.X
+        top_k = int(data.shape[1] * top_percentage)
+        partitioned_indices = np.argpartition(-data, top_k, axis=1)[:, :top_k]
+        col_names = np.array(self.edata.var_names)
+        top_interactions_counts = col_names[partitioned_indices].flatten().tolist()
         top_interactions_counts = Counter(top_interactions_counts).most_common()
         self.edata.uns[f'top_interactions_count'] = dict(top_interactions_counts)
         interaction_list = list(dict(top_interactions_counts).keys())
