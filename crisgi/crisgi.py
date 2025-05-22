@@ -338,7 +338,10 @@ class CRISGI():
                 df_list.append(df)
 
         df = pd.concat(df_list)
-        edata.uns[f'rank_genes_groups_df'] = df
+        if mytarget_group == None:
+            edata.uns[f'rank_genes_groups_df'] = df
+        else:
+            edata.uns[f'rank_genes_groups_{mytarget_group}_df'] = df
         return df
 
     #CRISGI
@@ -494,37 +497,53 @@ class CRISGI():
         self.edata.uns[f'{method}_{self.groupby}_{target_group}_{test_type}_enrich_df'] = df
 
     # CRISGI prerank_enrich_gene -> pheno_level_CT_rank
-    def pheno_level_CT_rank(self, ref_group, target_group, sortby='pvals_adj', n_top_interactions=None,
+    def pheno_level_CT_rank(self, ref_group, target_group, sortby='scores', n_top_interactions=None, split_interaction = True,
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'], 
                         prefix = 'test',                            
                        min_size=5, max_size=1000, permutation_num=1000, seed=0,
                        ):
+        
+
+        if sortby not in ['logfoldchanges', 'scores']:
+            print_msg("sortby must be logfoldchanges or scores")
+            
+                
+        df = self.edata.uns[f'rank_genes_groups_{target_group}_df']
+        df = df[(df['ref_group'] == ref_group) & (df['target_group'] == target_group)]
+
         if n_top_interactions is None:
-            n_top_interactions = len(self.edata.uns['rank_genes_groups_df'])
-        if n_top_interactions > len(self.edata.uns['rank_genes_groups_df']):
-            n_top_interactions = len(self.edata.uns['rank_genes_groups_df'])
+            n_top_interactions = len(df)
+        if n_top_interactions > len(df):
+            n_top_interactions = len(df)
         if n_top_interactions < 1:
             n_top_interactions = 1
-                
-        df = self.edata.uns['rank_genes_groups_df']
-        df = df[(df['ref_group'] == ref_group) & (df['target_group'] == target_group)]
-        df = df.sort_values(by=[sortby], ascending=False)
-        df = df[0:n_top_interactions]
-        df = df[['names', sortby]]
-        df['gene1'] = df['names'].apply(lambda x: x.split('_')[0])
-        df['gene2'] = df['names'].apply(lambda x: x.split('_')[1])
-        df1 = df[['gene1', sortby]]
-        df2 = df[['gene2', sortby]]
-        df1.columns = ['gene', sortby]
-        df2.columns = ['gene', sortby]
-        df = pd.concat([df1, df2])
-        df = df.groupby('gene').sum()
-        df = df.reset_index()
-        rank_df = df.sort_values(sortby, ascending=False)
-        rank_df = rank_df.reset_index()
-        del rank_df['index']
+
+        if split_interaction:
+            df = df.sort_values(by=[sortby], ascending=False)
+            df = df[0:n_top_interactions]
+            df = df[['names', sortby]]
+            df['gene1'] = df['names'].apply(lambda x: x.split('_')[0])
+            df['gene2'] = df['names'].apply(lambda x: x.split('_')[1])
+            df1 = df[['gene1', sortby]]
+            df2 = df[['gene2', sortby]]
+            df1.columns = ['gene', sortby]
+            df2.columns = ['gene', sortby]
+            df = pd.concat([df1, df2])
+            df = df.groupby('gene').sum()
+            df = df.reset_index()
+            rank_df = df.sort_values(sortby, ascending=False)
+            rank_df = rank_df.reset_index()
+            del rank_df['index']
+        else:
+            df = df.sort_values(by=sortby, ascending=False).head(n_top_interactions)
+            rank_df = df[['names', sortby]].copy()
+            rank_df.columns = ['gene', sortby]
+            rank_df = rank_df.groupby('gene').sum().reset_index() 
+
+            rank_df = rank_df.sort_values(sortby, ascending=False).reset_index(drop=True)
+
         res = gp.prerank(rnk=rank_df,
                          gene_sets=gene_sets,
                          threads=self.n_threads,
@@ -544,11 +563,25 @@ class CRISGI():
         
     
     # CRISGI prerank_gsva_interaction -> obs_level_CT_rank
-    def obs_level_CT_rank(self, gene_sets, prefix='test',
+    def obs_level_CT_rank(self, gene_sets,method = "prod", prefix='test', split_interaction = True,
                               min_size=5,
                        ):
-        df = pd.DataFrame(self.edata.X.T, columns=self.edata.obs_names,
+        df = pd.DataFrame(self.edata.layers[f'Ref_{method}_entropy'].T, columns=self.edata.obs_names,
                         index=self.edata.var_names)
+        if split_interaction :
+            gene1 = df.index.str.split('_').str[0]
+            gene2 = df.index.str.split('_').str[1]
+
+            df1 = df.copy()
+            df1.index = gene1
+
+            df2 = df.copy()
+            df2.index = gene2
+
+            df_combined = pd.concat([df1, df2])
+            df = df_combined.groupby(df_combined.index).mean()
+
+
         es = gp.gsva(data=df, gene_sets=gene_sets, min_size=min_size,
                      outdir=self.out_dir + '/' + prefix)
         df = es.res2d

@@ -83,13 +83,17 @@ def investigate_interaction(crisgi_obj, interaction, groupby='group',
     plt.show()
 
 
-def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="pearson", test_type="TER",
-                    p_adjust=True, p_cutoff=0.05, n_top_pathway=10, n_top_interactions=500,
-                    # Available options for piority_term: None, list of terms(specific pathway names)
-                    piority_term=None,
-                    # Available options for eval_para: 'top_n_ratio', 'overlap_ratio, 'P-value', 'Adjusted P-value', 'Odds Ratio', 'Combined Score', '-logP'
-                    eval_para='top_n_ratio',
-                    dataset_name=None,):
+def prepare_pheno_level_top_n_heatmap_data(
+    crisgi_obj,
+    target_group,
+    method="pearson",
+    test_type="TER",
+    p_adjust=True,
+    p_cutoff=0.05,
+    n_top_interactions=500,
+    piority_term=None,
+    eval_para='top_n_ratio'
+):
     df = crisgi_obj.edata.uns[f"{method}_{crisgi_obj.groupby}_{target_group}_{test_type}_enrich_df"]
 
     if p_adjust:
@@ -99,45 +103,25 @@ def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="pearson",
     df = df[df["top_n"] <= n_top_interactions]
     
     df["overlap_ratio"] = df["Overlap"].apply(
-    lambda x: float(x.split("/")[0]) / float(x.split("/")[1])
+        lambda x: float(x.split("/")[0]) / float(x.split("/")[1])
     )
     
     if eval_para in ['Adjusted P-value', 'P-value']:
-        ascending=True
-        if piority_term is None:
-            df["selected"] = 0
-        else:
-            df["selected"] = df["Term"].apply(
-                lambda x: x
-                not in piority_term
-            )
+        ascending = True
+        df["selected"] = df["Term"].apply(lambda x: 0 if piority_term is None else int(x not in piority_term))
     elif eval_para in ['Odds Ratio', 'top_n_ratio', 'overlap_ratio', 'Combined Score']:
-        ascending=False
-        if piority_term is None:
-            df["selected"] = 1
-        else:
-            df["selected"] = df["Term"].apply(
-                lambda x: x
-                in piority_term
-            )
+        ascending = False
+        df["selected"] = df["Term"].apply(lambda x: 1 if piority_term is None else int(x in piority_term))
     elif eval_para == '-logP':
-        ascending=False
-        if p_adjust == True:
-            df['-logP'] = -np.log10(df['Adjusted P-value'])
-        else:
-            df['-logP'] = -np.log10(df['P-value'])
-            
-        if piority_term is None:
-            df["selected"] = 1
-        else:
-            df["selected"] = df["Term"].apply(
-                lambda x: x
-                in piority_term
-            )
+        ascending = False
+        df['-logP'] = -np.log10(df['Adjusted P-value'] if p_adjust else df['P-value'])
+        df["selected"] = df["Term"].apply(lambda x: 1 if piority_term is None else int(x in piority_term))
     else:
         print_msg(f"Evaluation parameter {eval_para} is not supported.")
         return None
-    
+
+    heatmap_data_by_gene_set = {}
+
     for gene_set in set(df["Gene_set"].unique()):
         tmp = df[df["Gene_set"] == gene_set]
         tmp = pd.pivot(
@@ -148,29 +132,84 @@ def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="pearson",
         )[eval_para]
         
         tmp_weight = tmp * np.array(np.sum(tmp.columns)/tmp.columns)
-        
-        # weights
-        if ascending == True:
-            tmp_weight = pd.DataFrame(tmp_weight.sum(axis=1) / (len(tmp.columns) - tmp.isna().sum(axis=1)),columns=['sum'])
+        if ascending:
+            tmp_weight = pd.DataFrame(tmp_weight.sum(axis=1) / (len(tmp.columns) - tmp.isna().sum(axis=1)), columns=['sum'])
         else:
-            tmp_weight = pd.DataFrame(tmp_weight.sum(axis=1) * (len(tmp.columns) - tmp.isna().sum(axis=1)),columns=['sum'])
-    
+            tmp_weight = pd.DataFrame(tmp_weight.sum(axis=1) * (len(tmp.columns) - tmp.isna().sum(axis=1)), columns=['sum'])
+        
         tmp_weight = tmp_weight.sort_values(by=['sum'], ascending=ascending)
-        tmp_weight['rank'] = np.arange(1,len(tmp_weight)+1)
+        tmp_weight['rank'] = np.arange(1, len(tmp_weight)+1)
         tmp['rank'] = tmp_weight['rank']
         tmp_weight = tmp_weight.sort_values(by=['selected','sum'], ascending=ascending)
         idx = tmp_weight.index.get_level_values(0)
-        tmp = tmp.T[idx].T.head(n_top_pathway).reset_index().set_index('Term').drop(columns='selected')
+        tmp = tmp.T[idx].T.reset_index().set_index('Term').drop(columns='selected')
         tmp['rank'] = tmp['rank'].astype(int)
         tmp.index = tmp.apply(lambda row: f"{row.name} (Rank {int(row['rank'])})", axis=1)
         tmp.drop(columns='rank', inplace=True)
-        
+
+        heatmap_data_by_gene_set[gene_set] = tmp
+
+    return heatmap_data_by_gene_set
+
+
+def plot_pheno_level_top_n_heatmap(
+    heatmap_data_by_gene_set,
+    crisgi_obj,
+    target_group,
+    method="pearson",
+    test_type="TER",
+    eval_para='top_n_ratio',
+    dataset_name=None,
+    n_top_pathway=10
+):
+    for gene_set, tmp in heatmap_data_by_gene_set.items():
+        tmp = tmp.head(n_top_pathway)
+        plt.figure(figsize=(8, max(4, 0.4 * len(tmp))))
         sns.heatmap(tmp, yticklabels=1)
         plt.title(f"{dataset_name}_{method}_{crisgi_obj.groupby}_{target_group}_{test_type}s\n" + f"{gene_set} with {eval_para}")
         fn = f"{crisgi_obj.out_dir}/{method}_{crisgi_obj.groupby}_{target_group}_{test_type}_{gene_set}_{eval_para}_enrich_top_n.png"
-        plt.savefig(fn,dpi=300,format='png',bbox_inches='tight')
+        plt.savefig(fn, dpi=300, format='png', bbox_inches='tight')
         print_msg(f"[Output] The {method} {crisgi_obj.groupby} {target_group} {test_type} {gene_set} {eval_para} top_n enrichment is saved to:\n{fn}")
         plt.show()
+
+
+
+
+def pheno_level_accumulated_top_n_ORA(crisgi_obj, target_group,method="pearson", test_type="TER",
+                    p_adjust=True, p_cutoff=0.05, n_top_pathway=10, n_top_interactions=500,
+                    # Available options for piority_term: None, list of terms(specific pathway names)
+                    piority_term=None,
+                    # Available options for eval_para: 'top_n_ratio', 'overlap_ratio, 'P-value', 'Adjusted P-value', 'Odds Ratio', 'Combined Score', '-logP'
+                    eval_para='top_n_ratio',
+                    dataset_name=None,):
+    
+    data = prepare_pheno_level_top_n_heatmap_data(
+        crisgi_obj, 
+        target_group=target_group,
+        method=method,
+        test_type= test_type,
+        p_adjust = p_adjust,
+        p_cutoff =  p_cutoff,
+        n_top_interactions = n_top_interactions,
+        piority_term= piority_term,
+        eval_para=eval_para,
+        dataset_name=dataset_name
+    )
+
+    plot_pheno_level_top_n_heatmap(
+        data,
+        crisgi_obj,
+        target_group= target_group,
+        method=method,
+        test_type=test_type,
+        eval_para=eval_para,
+        dataset_name=dataset_name,
+        n_top_pathway =n_top_pathway,
+    )
+
+
+    crisgi_obj.uns['pheno_level_heatmap_data'] = data
+    
 
         
 def draw_gene_network(crisgi_obj, target_group,
