@@ -3,7 +3,7 @@
 
 ## Prerequisites
 
-- Python 3.11 or higher
+- Python 3.9 or higher
 - pip (Python package installer)
 - git (if installing from source)
 - conda (optional, for creating a virtual environment)
@@ -21,7 +21,7 @@
 - seaborn
 - pyvis
 - pyseat
-- gesapy
+- gseapy
 - scikit-survival
 - pymannkendall
 - multiprocessing
@@ -29,7 +29,7 @@
 ## Installation Steps
 ```markdown
 # Installation (From PyPI)
-pip install CRISGI
+pip install crisgi
 
 # Installation (From Source)
 pip install git+https://github.com/compbioclub/CRISGI.git@main

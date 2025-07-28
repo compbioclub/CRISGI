@@ -1,0 +1,19 @@
+# Test environment requirements
+# Include base requirements
+-r requirements.txt
+
+# Testing frameworks
+pytest>=6.0
+pytest-cov>=2.10
+pytest-xdist>=2.4.0  # for parallel testing
+pytest-mock>=3.6.0
+
+# Code quality tools
+black>=21.0
+flake8>=3.8
+isort>=5.0
+mypy>=0.910
+
+# Security and vulnerability scanning
+bandit>=1.7.0
+safety>=1.10.0
