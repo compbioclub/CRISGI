@@ -3,7 +3,7 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "CRISGI"
+name = "crisgi"
 authors = [
     {name = "Lyu C., Jiang A., Ng K. H., Liu X., Chen L."},
 ]

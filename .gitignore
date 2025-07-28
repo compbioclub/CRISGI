@@ -6,3 +6,5 @@
 out
 build
 *.egg-info
+.pypirc
+dist
