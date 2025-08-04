@@ -4,8 +4,6 @@ Welcome to the official documentation of Charting CRItical tranSient Gene Intera
 
 ## 🗺️ Overview
 
-![Figure1](./docs/figure/Figure1.png)
-
 Critical transitions (CTs) in gene regulatory networks (GRNs) drive pivotal shifts in disease progression. While CT theory holds great promise for early disease detection, existing computational frameworks face major limitations. They rely on unsupervised ranking of CT signals at individual gene or gene-module level, apply unranked gene set enrichment analyses, and depend on manual inspection of signal trends to infer CT presence and onset within a single cohort. Additionally, multimodal transcriptomic data remain underutilized. These approaches limit mechanistic resolution and hinder clinical translation.
 
 We present CRISGI, a novel CT framework designed to overcome these challenges. CRISGI enables phenotype-specific CT gene-gene interaction modeling, CT-rank enrichment analyses, automated CT presence and onset prediction, and supports bulk, single-cell, and spatial transcriptomic (ST) data.
