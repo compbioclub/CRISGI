@@ -40,7 +40,9 @@ def load_crisgi(pk_fn):
 class CRISGI():
 
     # CRISGI
-    def __init__(self, adata, bg_net=None, bg_net_score_cutoff=850,
+    def __init__(self, adata, bg_net=None,
+                 bg_net_method='stringdb',
+                 bg_net_score_cutoff=850,
                  genes=None,
                  n_hvg=5000, n_pcs=30,
                  interactions=None,
@@ -68,9 +70,9 @@ class CRISGI():
         if n_hvg is not None:
             self.preprocess_adata(n_hvg=n_hvg, n_pcs=n_pcs)
 
-        self.load_bg_net(bg_net, bg_net_score_cutoff, interactions, genes)
+        self.load_bg_net(bg_net, bg_net_method, bg_net_score_cutoff, interactions, genes)
 
-    def load_bg_net(self, bg_net, bg_net_score_cutoff, interactions, genes):
+    def load_bg_net(self, bg_net, bg_net_method, bg_net_score_cutoff, interactions, genes):
         self.bg_net_score_cutoff = bg_net_score_cutoff
 
         if interactions is not None:
@@ -90,7 +92,13 @@ class CRISGI():
                 genes = np.sort(genes)
                 self.adata = self.adata[:, genes]
                 self.adata.var['i'] = range(self.adata.shape[1])
-                bg_net, _ = self.load_bg_net_from_genes(genes)
+                if bg_net_method == 'stringdb':
+                    bg_net, _ = self.load_bg_net_from_genes(genes)
+                elif bg_net_method == 'correlation':
+                    bg_net, _ = self.load_bg_net_from_correlation(genes)
+                else:
+                    raise ValueError(f'bg_net_method {bg_net_method} is not supported!')
+                    
         else:
             bg_net = csr_matrix(np.triu(self.adata.varm['bg_net']))
         self.adata.varm['bg_net'] = bg_net 
@@ -163,6 +171,25 @@ class CRISGI():
         bg_net = np.triu(bg_net)
         bg_net = csr_matrix(bg_net)
         print('output interactions after bg_net', len(interactions))
+        return bg_net, interactions
+    
+    def load_bg_net_from_correlation(self, genes):
+        print_msg(f'load bg_net by Pearson correlation (cutoff={self.bg_net_score_cutoff}).')
+        X = self.adata[:, genes].X
+        from scipy.sparse import issparse
+        if issparse(X):
+            X = X.toarray()
+        corr_matrix = np.corrcoef(X, rowvar=False)
+        corr_matrix = np.nan_to_num(corr_matrix, nan=0.0)
+        
+        row, col = np.where(np.triu(np.abs(corr_matrix) >= self.bg_net_score_cutoff, k=1))
+        weights = np.abs(corr_matrix[row, col])
+        
+        M = len(genes)
+        bg_net = csr_matrix((weights, (row, col)), shape=(M, M))
+        interactions = [f'{genes[i]}_{genes[j]}' for i, j in zip(row, col)]
+        
+        print_msg(f'output interactions after correlation bg_net: {len(interactions)}')
         return bg_net, interactions
 
     # CRISGI
@@ -745,7 +772,7 @@ class CRISGI():
                 fn = f'{self.out_dir}/{method}_{self.groupby}_{target_group}_{len(interactions)}{test_type}s_{survival.upper()}_surv.png'
                 print_msg(f'[Output] The survival plot are saved to:\n{fn}')
 
-    def detect_startpoint(self, symptom_types = ["Symptomatic"]):
+    def detect_startpoint(self, symptom_types = ["Symptomatic"], var = 'TER'):
         """
             Perform start point detection on samples with specified symptom types,
             and store the predicted CT_time in the 'CT_time' column of edata.obs.
@@ -760,14 +787,27 @@ class CRISGI():
         """
         edata = self.edata
 
-        mask = edata.obs['symptom'].isin(["Symptomatic"])
-
+        mask = edata.obs['symptom'].isin(symptom_types).copy()
+        
         symp_edata = ad.AnnData(
-            X=edata.X[mask],
+            X=edata.X[mask].copy(),
             obs=edata.obs.loc[mask].copy(),
             var=edata.var.copy(),
-            layers={k: v[mask] for k, v in edata.layers.items()}  # 只拷贝layers
+            layers={k: v[mask] for k, v in edata.layers.items()}
         )
+        
+        if var == 'DER':
+            der_interactions = edata.uns["prod_symptom_Symptomatic_DER"].copy()
+            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
+            symp_edata = symp_edata[:, symp_edata.var["interaction"].isin(der_interactions)].copy()
+        elif var == 'TER':
+            ter_interactions = edata.uns["prod_symptom_Symptomatic_TER"].copy()
+            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
+            symp_edata = symp_edata[:, symp_edata.var["interaction"].isin(ter_interactions)].copy()
+        elif var == 'all':
+            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
+        else:
+            raise ValueError(f"Unknown var: {var}")
 
         for sample in symp_edata.obs['subject'].unique():
             sample_edata = symp_edata[symp_edata.obs['subject'] == sample]
@@ -784,8 +824,7 @@ class CRISGI():
             df = df.T
 
             signals_matrix = df.to_numpy()
-            n_col = 100
-            last_col = signals_matrix[:, -1].reshape(-1, 1)
+            n_col = 125
 
             signals_matrix = np.hstack((signals_matrix, np.zeros((signals_matrix.shape[0], n_col))))
             sample_rate = signals_matrix.shape[1]
