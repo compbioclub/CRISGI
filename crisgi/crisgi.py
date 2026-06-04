@@ -772,22 +772,26 @@ class CRISGI():
                 fn = f'{self.out_dir}/{method}_{self.groupby}_{target_group}_{len(interactions)}{test_type}s_{survival.upper()}_surv.png'
                 print_msg(f'[Output] The survival plot are saved to:\n{fn}')
 
-    def detect_startpoint(self, symptom_types = ["Symptomatic"], var = 'TER'):
+    def detect_startpoint(self, symptom='symptom', symptom_types = ["Symptomatic"], var = 'TER'):
         """
             Perform start point detection on samples with specified symptom types,
             and store the predicted CT_time in the 'CT_time' column of edata.obs.
 
             Parameters
             ----------
+            symptom : str
+                The column name in edata.obs to filter samples by.
             symptom_types : list of str
                 A list of symptom types to filter samples by.
-                These values should correspond to those in edata.obs['symptom'], 
+                These values should correspond to those in edata.obs[symptom], 
                 for example: ["Symptomatic"].
+                Notice that the first item in the symptom_types list should have the coorresponding DER/TER interactions in edata.uns. 
+                For example: "Symptomatic" in symptom_types list should have the corresponding DER/TER interactions in edata.uns with the key f"prod_{symptom}_Symptomatic_DER" or "prod_{symptom}_Symptomatic_TER".
 
         """
         edata = self.edata
 
-        mask = edata.obs['symptom'].isin(symptom_types).copy()
+        mask = edata.obs[symptom].isin(symptom_types).copy()
         
         symp_edata = ad.AnnData(
             X=edata.X[mask].copy(),
@@ -797,11 +801,11 @@ class CRISGI():
         )
         
         if var == 'DER':
-            der_interactions = edata.uns["prod_symptom_Symptomatic_DER"].copy()
+            der_interactions = edata.uns[f"prod_{symptom}_{symptom_types[0]}_DER"].copy()
             symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
             symp_edata = symp_edata[:, symp_edata.var["interaction"].isin(der_interactions)].copy()
         elif var == 'TER':
-            ter_interactions = edata.uns["prod_symptom_Symptomatic_TER"].copy()
+            ter_interactions = edata.uns[f"prod_{symptom}_{symptom_types[0]}_TER"].copy()
             symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
             symp_edata = symp_edata[:, symp_edata.var["interaction"].isin(ter_interactions)].copy()
         elif var == 'all':
@@ -830,6 +834,9 @@ class CRISGI():
             sample_rate = signals_matrix.shape[1]
 
             start_sample = detect_start_point(signals_matrix, sample_rate, frame_size_ms=25, hop_size_ms=10)
+            if start_sample is None:
+                edata.obs.loc[edata.obs['subject'] == sample, 'CT_time'] = np.nan
+                continue
             predict_time = df.columns.values[start_sample]
 
             # print(f"{sample} predict time: {predict_time}")

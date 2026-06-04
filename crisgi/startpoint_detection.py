@@ -53,9 +53,12 @@ def detect_start_point(signal_matrix, sample_rate, frame_size_ms=25, hop_size_ms
 
     # Detect start point using thresholding
     threshold = np.mean(smoothed_energy) + 2 * np.std(smoothed_energy)
-    start_point = np.where(smoothed_energy > threshold)[0][0]
-
-    # Convert the index back to the original sample index
-    start_sample = start_point * hop_size
+    if (smoothed_energy > threshold).sum() == 0:
+        print("No start point detected: energy does not exceed the threshold.")
+        start_sample = None
+    else:
+        start_point = np.where(smoothed_energy > threshold)[0][0]
+        # Convert the index back to the original sample index
+        start_sample = start_point * hop_size
 
     return start_sample
