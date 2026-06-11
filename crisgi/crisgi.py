@@ -533,13 +533,29 @@ class CRISGI():
             # gseaplot(rank_metric=res.ranking, term=term, ofname=f'{self.out_dir}/{prefix}_{ref_group}_{target_group}/{term}.pdf', **res.results[term])
         rank_df.to_csv(f'{self.out_dir}/{prefix}_{ref_group}_{target_group}/rank.csv')
         
-    
-    # CRISGI prerank_gsva_interaction -> obs_level_CT_rank
-    def obs_level_CT_rank(self, gene_sets, prefix='test',
-                              min_size=5,
-                       ):
-        df = pd.DataFrame(self.edata.X.T, columns=self.edata.obs_names,
+        
+    def obs_level_CT_rank(self, 
+                          gene_sets=['KEGG_2021_Human', 'GO_Molecular_Function_2023',
+                                    'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
+                                    'MSigDB_Hallmark_2020'], 
+                          method = "prod", prefix='test',
+                          split_interaction = True, min_size=5,):
+        df = pd.DataFrame(self.edata.layers[f'Ref_{method}_entropy'].T, columns=self.edata.obs_names,
                         index=self.edata.var_names)
+        if split_interaction :
+            gene1 = df.index.str.split('_').str[0]
+            gene2 = df.index.str.split('_').str[1]
+
+            df1 = df.copy()
+            df1.index = gene1
+
+            df2 = df.copy()
+            df2.index = gene2
+
+            df_combined = pd.concat([df1, df2])
+            df = df_combined.groupby(df_combined.index).mean()
+
+
         es = gp.gsva(data=df, gene_sets=gene_sets, min_size=min_size,
                      outdir=self.out_dir + '/' + prefix)
         df = es.res2d
@@ -550,7 +566,39 @@ class CRISGI():
         df = df.sort_values(by=['ES'])
         df.to_csv(f'./{self.out_dir}/{prefix}/prerank_gsva_interaction.csv')
         
-        self.gp_es = es        
+        self.gp_es = es
+        '''
+        for term in gene_sets.keys():
+            term_df = df[df['Term'] == term]
+            sns.lineplot(term_df, x='time', y='ES', hue=self.groupby, 
+                        units='subject', estimator=None)
+          
+            plt.title(term)
+            plt.show()
+            sns.barplot(term_df, x='Name', y='ES', hue=self.groupby)
+            plt.title(term)
+            plt.xticks([])
+            plt.xlabel(None)
+            plt.show()
+        '''
+        return df
+        
+    
+    # CRISGI prerank_gsva_interaction -> obs_level_CT_rank
+    def obs_level_CT_rank_self(self, gene_sets, prefix='test', min_size=5,):
+        df = pd.DataFrame(self.edata.X.T, columns=self.edata.obs_names,
+                        index=self.edata.var_names)
+        es = gp.gsva(data=df, gene_sets=gene_sets, min_size=min_size,
+                     outdir=self.out_dir + '/' + prefix)
+        df = es.res2d
+        if 'groupby' in self.__dict__:
+            df[self.groupby] = df['Name'].apply(lambda x: self.edata.obs[self.groupby].to_dict()[x])
+        #df['subject'] = df['Name'].apply(lambda x: x.split(' ')[0])
+        #df['time'] = df['Name'].apply(lambda x: int(x.split(' ')[1]))
+        df = df.sort_values(by=['ES'])
+        df.to_csv(f'./{self.out_dir}/{prefix}/prerank_gsva_interaction_self.csv')
+        
+        self.gp_self_es = es
         '''
         for term in gene_sets.keys():
             term_df = df[df['Term'] == term]
@@ -999,6 +1047,8 @@ class CRISGITime(CRISGI):
     # CRISGITime
     def obs_level_CT_rank(self, gene_sets, **kwargs):
         super(CRISGITime, self).obs_level_CT_rank(gene_sets=gene_sets, **kwargs)
+    def obs_level_CT_rank_self(self, gene_sets, **kwargs):
+        super(CRISGITime, self).obs_level_CT_rank_self(gene_sets=gene_sets, **kwargs)    
     def pheno_level_CT_rank(self, ref_group, target_group, **kwargs):
         super(CRISGITime, self).pheno_level_CT_rank(ref_group=ref_group, target_group=target_group, **kwargs)
     def pheno_level_accumulated_top_n_ORA(self, target_group, **kwargs):
