@@ -485,7 +485,7 @@ class CRISGI():
         self.edata.uns[f'{method}_{self.groupby}_{target_group}_{test_type}_enrich_df'] = df
 
     # CRISGI prerank_enrich_gene -> pheno_level_CT_rank
-    def pheno_level_CT_rank(self, ref_group, target_group, sortby='pvals_adj', n_top_interactions=None,
+    def pheno_level_CT_rank(self, ref_group, target_group, sortby='scores', n_top_interactions=None,
                        gene_sets=['KEGG_2021_Human',
                                   'GO_Molecular_Function_2023', 'GO_Cellular_Component_2023', 'GO_Biological_Process_2023',
                                   'MSigDB_Hallmark_2020'], 
@@ -498,10 +498,17 @@ class CRISGI():
             n_top_interactions = len(self.edata.uns['rank_genes_groups_df'])
         if n_top_interactions < 1:
             n_top_interactions = 1
-                
+        
+        if sortby not in ['logfoldchanges', 'scores', 'pvals', 'pvals_adj']:
+            raise ValueError(f'sortby should be one of logfoldchanges, scores, pvals, pvals_adj, but got {sortby}.')
+        if sortby in ['pvals', 'pvals_adj']:
+            ascending_flag = True
+        else:
+            ascending_flag = False
+
         df = self.edata.uns['rank_genes_groups_df']
         df = df[(df['ref_group'] == ref_group) & (df['target_group'] == target_group)]
-        df = df.sort_values(by=[sortby], ascending=False)
+        df = df.sort_values(by=[sortby], ascending=ascending_flag)
         df = df[0:n_top_interactions]
         df = df[['names', sortby]]
         df['gene1'] = df['names'].apply(lambda x: x.split('_')[0])
@@ -513,7 +520,7 @@ class CRISGI():
         df = pd.concat([df1, df2])
         df = df.groupby('gene').sum()
         df = df.reset_index()
-        rank_df = df.sort_values(sortby, ascending=False)
+        rank_df = df.sort_values(sortby, ascending=ascending_flag)
         rank_df = rank_df.reset_index()
         del rank_df['index']
         res = gp.prerank(rnk=rank_df,
