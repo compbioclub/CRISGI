@@ -23,6 +23,7 @@ from multiprocessing import Pool
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import Counter
 import warnings
+from joblib import Parallel, delayed
 
 from crisgi.startpoint_detection import detect_start_point
 warnings.filterwarnings('ignore')
@@ -61,6 +62,7 @@ class CRISGI():
         self.n_threads = n_threads
         self.dataset = dataset
         self.class_type = class_type
+        self.n_hvg=n_hvg
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
         self.out_dir = out_dir
@@ -97,7 +99,7 @@ class CRISGI():
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
     # CRISGI
-    def init_edata(self, test_obss, headers):
+    def init_edata(self, test_obss, headers, layer='log1p', n_hvr=5000, n_jobs=-1):
         adata = self.adata
         test_obss_is = [adata[test_obs, :].obs.i.tolist() for test_obs in test_obss]
         adata = self.adata
@@ -118,6 +120,39 @@ class CRISGI():
         edata.var['i'] = range(interaction_n)
         self.edata = edata
         print_msg(f'Init edata with obs {edata.shape[0]} and interaction {edata.shape[1]}')
+
+        self._calculate_edata_pos_coexp(layer=layer, n_jobs=n_jobs)
+
+        try:
+            print('using flavor=cell_ranger to detect HVR')
+            sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor='cell_ranger', layer='pos_coexp')
+        except:
+            print('using flavor=seurat_v3 to detect HVR')
+            sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor='seurat_v3', layer='pos_coexp')
+
+    def _calculate_edata_pos_coexp(self, layer='log1p', batch_size=1000, n_jobs=-1):
+        adata = self.adata
+        edata = self.edata
+
+        X = adata.layers[layer]  # shape: (n_obs, n_var)
+        row = edata.var['gene1_i'].values
+        col = edata.var['gene2_i'].values
+        n_obs, n_var = X.shape
+
+        def process_batch(start, end):
+            X_batch = X[start:end]  # shape: (B, n_var)
+            # Slice selected dimensions
+            X1 = X_batch[:, row]  # (B, n_var)
+            X2 = X_batch[:, col]  # (B, n_var)
+            prod = X1*X2
+            return prod/prod.sum(axis=1, keepdims=True)  # (B, n_var)
+
+        batches = [(i, min(i + batch_size, n_obs)) for i in range(0, n_obs, batch_size)]
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(process_batch)(start, end) for start, end in batches
+        )
+        edata.layers['pos_coexp'] = np.vstack(results).astype(np.float32)
+        print_msg(f'Populated edata pos_coexp with shape {edata.layers['pos_coexp'].shape}')
 
     # CRISGI
     def save(self):
@@ -207,7 +242,13 @@ class CRISGI():
     def preprocess_adata(self, n_hvg=5000, random_state=0, n_pcs=30, n_neighbors=10):
         adata = self.adata
         #sc.pp.scale(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='cell_ranger')
+        try:
+            print('using flavor=cell_ranger to detect HVG')
+            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='cell_ranger')
+        except:
+            print('using flavor=seurat_v3 to detect HVG')
+            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='seurat_v3')
+
         sc.tl.pca(adata)
         sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
         sc.tl.umap(adata, random_state=random_state)
@@ -563,7 +604,7 @@ class CRISGI():
         
     
     # CRISGI prerank_gsva_interaction -> obs_level_CT_rank
-    def obs_level_CT_rank(self, gene_sets,method = "prod", prefix='test', split_interaction = True,
+    def obs_level_CT_rank(self, gene_sets,method = "pos_coexp", prefix='test', split_interaction = True,
                               min_size=5,
                        ):
         df = pd.DataFrame(self.edata.layers[f'Ref_{method}_entropy'].T, columns=self.edata.obs_names,
@@ -886,9 +927,8 @@ class CRISGITime(CRISGI):
         self.model = None
         self.model_type = None  
 
-        self.set_model_type(model_type, ae_path=ae_path, mlp_path=mlp_path, model_path=model_path)
+        self.set_model_type(model_type, ae_path=ae_path, mlp_path=mlp_path, model_path=model_path)        
 
-        
 
     # CRISGITime
     def calculate_entropy(self, ref_obs, test_obss, groupby, ref_time, layer='log1p'):
@@ -962,7 +1002,6 @@ class CRISGITime(CRISGI):
             adata = self._calculate_group_entropy(ref_obs + test_obs, method=method)
             adata_dict[','.join(test_obs)] = adata
         self.adata_dict = adata_dict
-
         self._calculate_delta_entropy(ref_obs, test_obss, method=method)
 
     # CRISGITime
