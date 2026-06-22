@@ -42,7 +42,7 @@ def interaction_score_line(crisgi_obj, target_group=None,
             ax.set_title(mytitle)
         elif out_prefix:
             plt.title(mytitle)
-            plt.savefig(f'{out_prefix}_{mytitle}_interaction_score.png'.replace('\n', ' '))
+            plt.savefig(f'{out_prefix}_{target_group}_{method}_{test_type}_score.png')            
             plt.show()
         else:
             plt.title(mytitle)

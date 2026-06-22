@@ -23,6 +23,7 @@ from multiprocessing import Pool
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import Counter
 import warnings
+from joblib import Parallel, delayed
 
 from crisgi.startpoint_detection import detect_start_point
 warnings.filterwarnings('ignore')
@@ -105,7 +106,7 @@ class CRISGI():
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
     # CRISGI
-    def init_edata(self, test_obss, headers):
+    def init_edata(self, test_obss, headers, layer='log1p', n_jobs=-1):
         adata = self.adata
         test_obss_is = [adata[test_obs, :].obs.i.tolist() for test_obs in test_obss]
         adata = self.adata
@@ -126,6 +127,34 @@ class CRISGI():
         edata.var['i'] = range(interaction_n)
         self.edata = edata
         print_msg(f'Init edata with obs {edata.shape[0]} and interaction {edata.shape[1]}')
+
+        self._calculate_edata_prod(layer=layer, n_jobs=n_jobs)
+
+
+    def _calculate_edata_prod(self, layer='log1p', batch_size=1000, n_jobs=-1):
+        adata = self.adata
+        edata = self.edata
+
+        X = adata.layers[layer]  # shape: (n_obs, n_var)
+        row = edata.var['gene1_i'].values
+        col = edata.var['gene2_i'].values
+        n_obs, n_var = X.shape
+
+        def process_batch(start, end):
+            X_batch = X[start:end]  # shape: (B, n_var)
+            # Slice selected dimensions
+            X1 = X_batch[:, row]  # (B, n_var)
+            X2 = X_batch[:, col]  # (B, n_var)
+            prod = X1*X2
+            return prod/prod.sum(axis=1, keepdims=True)  # (B, n_var)
+
+        batches = [(i, min(i + batch_size, n_obs)) for i in range(0, n_obs, batch_size)]
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(process_batch)(start, end) for start, end in batches
+        )
+        edata.layers['prod'] = np.vstack(results).astype(np.float32)
+        print_msg(f'Populated edata prod with shape {edata.layers['prod'].shape}')
+
 
     # CRISGI
     def save(self):
@@ -234,7 +263,13 @@ class CRISGI():
     def preprocess_adata(self, n_hvg=5000, random_state=0, n_pcs=30, n_neighbors=10):
         adata = self.adata
         #sc.pp.scale(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='cell_ranger')
+        try:
+            print('using flavor=cell_ranger to detect HVG')
+            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='cell_ranger')
+        except:
+            print('using flavor=seurat_v3 to detect HVG')
+            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='seurat_v3')
+
         sc.tl.pca(adata)
         sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
         sc.tl.umap(adata, random_state=random_state)
@@ -407,6 +442,43 @@ class CRISGI():
         res = {'interaction': interaction, 'layer': layer,
                't_statistic': t_statistic, 'p_value': p_value}
         return res
+
+    def cohort_level_top_n_hvr_ORA(self,n_hvr=None,top_percentage=0.05,method='prod',
+                               gene_sets=['KEGG_2021_Human',
+                                        'GO_Molecular_Function_2023', 
+                                        'GO_Cellular_Component_2023', 
+                                        'GO_Biological_Process_2023',
+                                        'MSigDB_Hallmark_2020'],
+                                background=None,
+                                organism='human', plot=True):
+        edata = self.edata
+
+        if n_hvr is None:
+            n_hvr = int(edata.shape[1] * top_percentage)
+            print('top n hvr is', n_hvr, 'by top percentage', top_percentage)
+        else:
+            print('top n hvr is', n_hvr)
+
+        try:
+            print('using flavor=cell_ranger to detect HVR')
+            sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor='cell_ranger', layer='prod')
+        except:
+            print('using flavor=seurat_v3 to detect HVR')
+            sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor='seurat_v3', layer='prod')
+
+        interaction_list = edata.var[edata.var['highly_variable']].index
+
+        top_n, enr, enrich_df = self._enrich_for_top_n(n_hvr, interaction_list, gene_sets, organism, background)
+
+        fn = f'{self.out_dir}/{method}_cohort_hvr_enrich.csv'
+        enrich_df.to_csv(fn, index=False)
+
+        print_msg(f'[Output] The {method} cohort-level top hvr enrich statistics are saved to:\n{fn}')
+    
+        self.edata.uns[f'{method}_cohort_hvr_enrich_res'] = enr
+        self.edata.uns[f'{method}_cohort_hvr_enrich_df'] = enrich_df
+           
+
 
     def cohort_level_top_n_ORA(self,n_top_interactions=None,top_percentage=0.05,method='prod',
                                gene_sets=['KEGG_2021_Human',
