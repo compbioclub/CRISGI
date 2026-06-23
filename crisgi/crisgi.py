@@ -4,7 +4,7 @@ from crisgi.cnn.CNNModel import CNNModel
 from crisgi.logistic.LogisticModel import LogisticModel
 import scanpy as sc
 import anndata as ad
-from scipy.sparse import csr_matrix, coo_matrix
+from scipy.sparse import csr_matrix, issparse
 from scipy.stats import ttest_1samp, wilcoxon
 from pyseat.SEAT import SEAT
 import seaborn as sns
@@ -106,7 +106,7 @@ class CRISGI():
         print_msg(f'The number of edge for bg_net is {bg_net.count_nonzero()}.')
 
     # CRISGI
-    def init_edata(self, test_obss, headers, layer='log1p', n_jobs=-1):
+    def init_edata(self, test_obss, headers, layer='log1p'):
         adata = self.adata
         test_obss_is = [adata[test_obs, :].obs.i.tolist() for test_obs in test_obss]
         adata = self.adata
@@ -128,10 +128,10 @@ class CRISGI():
         self.edata = edata
         print_msg(f'Init edata with obs {edata.shape[0]} and interaction {edata.shape[1]}')
 
-        self._calculate_edata_prod(layer=layer, n_jobs=n_jobs)
+        self._calculate_edata_prod(layer=layer)
 
 
-    def _calculate_edata_prod(self, layer='log1p', batch_size=1000, n_jobs=-1):
+    def _calculate_edata_prod(self, layer='log1p', batch_size=1000):
         adata = self.adata
         edata = self.edata
 
@@ -141,17 +141,18 @@ class CRISGI():
         n_obs, n_var = X.shape
 
         def process_batch(start, end):
-            X_batch = X[start:end]  # shape: (B, n_var)
-            # Slice selected dimensions
-            X1 = X_batch[:, row]  # (B, n_var)
-            X2 = X_batch[:, col]  # (B, n_var)
-            prod = X1*X2
-            return prod/prod.sum(axis=1, keepdims=True)  # (B, n_var)
+            X_batch = X[start:end]                 # (B, n_var)
+            if issparse(X_batch):
+                X_batch = X_batch.toarray()        # dense, only B rows
+            X1 = X_batch[:, row]                    # (B, n_pairs)
+            X2 = X_batch[:, col]                    # (B, n_pairs)
+            prod = X1 * X2                          # now genuinely element-wise
+            denom = prod.sum(axis=1, keepdims=True)
+            denom[denom == 0] = 1                   # guard against all-zero rows
+            return prod / denom
 
         batches = [(i, min(i + batch_size, n_obs)) for i in range(0, n_obs, batch_size)]
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(process_batch)(start, end) for start, end in batches
-        )
+        results = [process_batch(start, end) for start, end in batches]
         edata.layers['prod'] = np.vstack(results).astype(np.float32)
         print_msg(f'Populated edata prod with shape {edata.layers['prod'].shape}')
 
