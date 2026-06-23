@@ -154,7 +154,7 @@ class CRISGI():
         batches = [(i, min(i + batch_size, n_obs)) for i in range(0, n_obs, batch_size)]
         results = [process_batch(start, end) for start, end in batches]
         edata.layers['prod'] = np.vstack(results).astype(np.float32)
-        print_msg(f'Populated edata prod with shape {edata.layers['prod'].shape}')
+        print_msg(f'Populated edata prod')
 
 
     # CRISGI
@@ -270,10 +270,6 @@ class CRISGI():
         except:
             print('using flavor=seurat_v3 to detect HVG')
             sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='seurat_v3')
-
-        sc.tl.pca(adata)
-        sc.pp.neighbors(adata, n_pcs=n_pcs, n_neighbors=n_neighbors)
-        sc.tl.umap(adata, random_state=random_state)
 
     # CRISGI
     def _prod(self, X, obs_is, row, col, obs_cutoff=100):
