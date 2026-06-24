@@ -45,11 +45,12 @@ class CRISGI():
                  bg_net_method='stringdb',
                  bg_net_score_cutoff=850,
                  genes=None,
-                 n_hvg=5000, n_pcs=30,
+                 n_hvg=5000, 
                  interactions=None,
                  n_threads=5,
                  interaction_methods=['prod'],
                  organism='human',
+                 flavor='cell_ranger',
                  class_type='time',
                  dataset='test',
                  out_dir='./out'
@@ -69,7 +70,7 @@ class CRISGI():
         self.out_dir = out_dir
 
         if n_hvg is not None:
-            self.preprocess_adata(n_hvg=n_hvg, n_pcs=n_pcs)
+            self.preprocess_adata(n_hvg=n_hvg, flavor=flavor)
 
         self.load_bg_net(bg_net, bg_net_method, bg_net_score_cutoff, interactions, genes)
 
@@ -261,15 +262,32 @@ class CRISGI():
         return bg_net, interactions
 
     # CRISGI
-    def preprocess_adata(self, n_hvg=5000, random_state=0, n_pcs=30, n_neighbors=10):
+    def preprocess_adata(self, n_hvg=5000, flavor='cell_ranger', layer='log1p'):
         adata = self.adata
         #sc.pp.scale(adata)
         try:
+            # cell ranger for log-normalized
+            # seurat_v3 for raw count
             print('using flavor=cell_ranger to detect HVG')
-            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='cell_ranger')
-        except:
-            print('using flavor=seurat_v3 to detect HVG')
-            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor='seurat_v3')
+            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor=flavor)
+        except Exception:
+            print('HVG flavors failed; selecting top genes by standard deviation')
+            X = adata.layers[layer]
+            # std per gene (handle sparse vs dense)
+            if issparse(X):
+                mean = np.asarray(X.mean(axis=0)).ravel()
+                mean_sq = np.asarray(X.multiply(X).mean(axis=0)).ravel()
+                var = mean_sq - mean**2
+                std = np.sqrt(np.clip(var, 0, None))
+            else:
+                std = np.std(np.asarray(X), axis=0)
+
+            top_idx = np.argsort(std)[::-1][:n_hvg]
+            hvg_mask = np.zeros(adata.n_vars, dtype=bool)
+            hvg_mask[top_idx] = True
+
+            adata.var['highly_variable'] = hvg_mask
+            adata.var['highly_variable_std'] = std
 
     # CRISGI
     def _prod(self, X, obs_is, row, col, obs_cutoff=100):
@@ -459,9 +477,24 @@ class CRISGI():
         try:
             print('using flavor=cell_ranger to detect HVR')
             sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor='cell_ranger', layer='prod')
-        except:
-            print('using flavor=seurat_v3 to detect HVR')
-            sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor='seurat_v3', layer='prod')
+        except Exception:
+            print('HVR flavors failed; selecting top interactions by standard deviation')
+            X = edata.layers['prod']
+            # std per gene (handle sparse vs dense)
+            if issparse(X):
+                mean = np.asarray(X.mean(axis=0)).ravel()
+                mean_sq = np.asarray(X.multiply(X).mean(axis=0)).ravel()
+                var = mean_sq - mean**2
+                std = np.sqrt(np.clip(var, 0, None))
+            else:
+                std = np.std(np.asarray(X), axis=0)
+
+            top_idx = np.argsort(std)[::-1][:n_hvr]
+            hvg_mask = np.zeros(edata.n_vars, dtype=bool)
+            hvg_mask[top_idx] = True
+
+            edata.var['highly_variable'] = hvg_mask
+            edata.var['highly_variable_std'] = std
 
         interaction_list = edata.var[edata.var['highly_variable']].index
 
