@@ -70,7 +70,7 @@ class CRISGI():
         self.out_dir = out_dir
 
         if n_hvg is not None:
-            self.preprocess_adata(n_hvg=n_hvg, flavor=flavor)
+            self.preprocess_adata(adata, n_hvg=n_hvg, flavor=flavor)
 
         self.load_bg_net(bg_net, bg_net_method, bg_net_score_cutoff, interactions, genes)
 
@@ -207,7 +207,6 @@ class CRISGI():
     def load_bg_net_from_correlation(self, genes):
         print_msg(f'load bg_net by Pearson correlation (cutoff={self.bg_net_score_cutoff}).')
         X = self.adata[:, genes].X
-        from scipy.sparse import issparse
         if issparse(X):
             X = X.toarray()
         corr_matrix = np.corrcoef(X, rowvar=False)
@@ -262,32 +261,38 @@ class CRISGI():
         return bg_net, interactions
 
     # CRISGI
-    def preprocess_adata(self, n_hvg=5000, flavor='cell_ranger', layer='log1p'):
-        adata = self.adata
-        #sc.pp.scale(adata)
-        try:
-            # cell ranger for log-normalized
-            # seurat_v3 for raw count
-            print('using flavor=cell_ranger to detect HVG')
-            sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor=flavor)
-        except Exception:
-            print('HVG flavors failed; selecting top genes by standard deviation')
-            X = adata.layers[layer]
-            # std per gene (handle sparse vs dense)
-            if issparse(X):
-                mean = np.asarray(X.mean(axis=0)).ravel()
-                mean_sq = np.asarray(X.multiply(X).mean(axis=0)).ravel()
-                var = mean_sq - mean**2
-                std = np.sqrt(np.clip(var, 0, None))
-            else:
-                std = np.std(np.asarray(X), axis=0)
+    def preprocess_adata(self, adata, n_hvg=5000, flavor='cell_ranger', layer='log1p'):
+        if flavor == 'direct_sd':
+            self._direct_sd(adata, n_hvg=n_hvg, layer=layer)
+        else:
+            try:
+                # cell ranger for log-normalized
+                # seurat_v3 for raw count
+                print(f'using flavor={flavor} to detect HVG')
+                sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor=flavor)
+            except Exception as e:
+                print(f'HVG flavors failed; {e}')
+                self._direct_sd(adata, n_hvg=n_hvg, layer=layer)
 
-            top_idx = np.argsort(std)[::-1][:n_hvg]
-            hvg_mask = np.zeros(adata.n_vars, dtype=bool)
-            hvg_mask[top_idx] = True
+    def _direct_sd(self, adata, n_hvg=5000, layer='log1p'):
 
-            adata.var['highly_variable'] = hvg_mask
-            adata.var['highly_variable_std'] = std
+        print('HVG flavors failed; selecting top genes by standard deviation')
+        X = adata.layers[layer]
+        # std per gene (handle sparse vs dense)
+        if issparse(X):
+            mean = np.asarray(X.mean(axis=0)).ravel()
+            mean_sq = np.asarray(X.multiply(X).mean(axis=0)).ravel()
+            var = mean_sq - mean**2
+            std = np.sqrt(np.clip(var, 0, None))
+        else:
+            std = np.std(np.asarray(X), axis=0)
+
+        top_idx = np.argsort(std)[::-1][:n_hvg]
+        hvg_mask = np.zeros(adata.n_vars, dtype=bool)
+        hvg_mask[top_idx] = True
+
+        adata.var['highly_variable'] = hvg_mask
+        adata.var['highly_variable_std'] = std
 
     # CRISGI
     def _prod(self, X, obs_is, row, col, obs_cutoff=100):
