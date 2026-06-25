@@ -148,13 +148,12 @@ class CRISGI():
             X1 = X_batch[:, row]                    # (B, n_pairs)
             X2 = X_batch[:, col]                    # (B, n_pairs)
             prod = X1 * X2                          # now genuinely element-wise
-            denom = prod.sum(axis=1, keepdims=True)
-            denom[denom == 0] = 1                   # guard against all-zero rows
-            return prod / denom
+            return prod 
 
         batches = [(i, min(i + batch_size, n_obs)) for i in range(0, n_obs, batch_size)]
         results = [process_batch(start, end) for start, end in batches]
         edata.layers['prod'] = np.vstack(results).astype(np.float32)
+        edata.layers['prod'] = edata.layers['prod']
         print_msg(f'Populated edata prod')
 
 
@@ -263,6 +262,7 @@ class CRISGI():
     # CRISGI
     def preprocess_adata(self, adata, n_hvg=5000, flavor='cell_ranger', layer='log1p'):
         if flavor == 'direct_sd':
+            print('Selecting top genes by standard deviation')
             self._direct_sd(adata, n_hvg=n_hvg, layer=layer)
         else:
             try:
@@ -272,11 +272,11 @@ class CRISGI():
                 sc.pp.highly_variable_genes(adata, n_top_genes=n_hvg, flavor=flavor)
             except Exception as e:
                 print(f'HVG flavors failed; {e}')
+                print('Selecting top genes by standard deviation')
                 self._direct_sd(adata, n_hvg=n_hvg, layer=layer)
 
     def _direct_sd(self, adata, n_hvg=5000, layer='log1p'):
 
-        print('HVG flavors failed; selecting top genes by standard deviation')
         X = adata.layers[layer]
         # std per gene (handle sparse vs dense)
         if issparse(X):
@@ -470,6 +470,7 @@ class CRISGI():
                                         'GO_Biological_Process_2023',
                                         'MSigDB_Hallmark_2020'],
                                 background=None,
+                                flavor='cell_ranger',
                                 organism='human', plot=True):
         edata = self.edata
 
@@ -479,27 +480,20 @@ class CRISGI():
         else:
             print('top n hvr is', n_hvr)
 
-        try:
-            print('using flavor=cell_ranger to detect HVR')
-            sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor='cell_ranger', layer='prod')
-        except Exception:
-            print('HVR flavors failed; selecting top interactions by standard deviation')
-            X = edata.layers['prod']
-            # std per gene (handle sparse vs dense)
-            if issparse(X):
-                mean = np.asarray(X.mean(axis=0)).ravel()
-                mean_sq = np.asarray(X.multiply(X).mean(axis=0)).ravel()
-                var = mean_sq - mean**2
-                std = np.sqrt(np.clip(var, 0, None))
-            else:
-                std = np.std(np.asarray(X), axis=0)
+        if flavor == 'direct_sd':
+            print('Selecting top HVR by standard deviation')
+            self._direct_sd(edata, n_hvg=n_hvr, layer='prod')
+        else:
+            try:
+                # cell ranger for log-normalized
+                # seurat_v3 for raw count
+                print(f'using flavor={flavor} to detect HVR')
+                sc.pp.highly_variable_genes(edata, n_top_genes=n_hvr, flavor=flavor)
+            except Exception as e:
+                print(f'HVR flavors failed; {e}')
+                print('Selecting top HVR by standard deviation')
+                self._direct_sd(edata, n_hvg=n_hvr, layer='prod')
 
-            top_idx = np.argsort(std)[::-1][:n_hvr]
-            hvg_mask = np.zeros(edata.n_vars, dtype=bool)
-            hvg_mask[top_idx] = True
-
-            edata.var['highly_variable'] = hvg_mask
-            edata.var['highly_variable_std'] = std
 
         interaction_list = edata.var[edata.var['highly_variable']].index
 
