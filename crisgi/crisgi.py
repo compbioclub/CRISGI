@@ -33,6 +33,32 @@ pd.options.mode.copy_on_write = True
 from crisgi.util import print_msg, get_array, set_adata_var, set_adata_obs
 
 
+def _split_interaction(interaction, ref_genes=None):
+    parts = interaction.split('_', 1)
+    if len(parts) == 2:
+        g1, g2 = parts[0], parts[1]
+        if ref_genes is None:
+            return g1, g2
+        if not isinstance(ref_genes, set):
+            ref_genes = set(ref_genes)
+        if g1 in ref_genes and g2 in ref_genes:
+            return g1, g2
+
+    ref_set = set(ref_genes) if ref_genes is not None else set()
+    for split_idx, ch in enumerate(interaction):
+        if ch != '_':
+            continue
+        g1 = interaction[:split_idx]
+        g2 = interaction[split_idx + 1:]
+        if (not ref_set) or (g1 in ref_set and g2 in ref_set):
+            return g1, g2
+
+    parts = interaction.split('_', 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    raise ValueError(f"Cannot split interaction name: {interaction!r}")
+
+
 def load_crisgi(pk_fn):
     crisgi_obj = pickle.load(open(pk_fn, 'rb'))
     print_msg(f'[Input] CRISGI object stored at {pk_fn} has been loaded.')
@@ -166,7 +192,7 @@ class CRISGI():
     # CRISGI
     def load_bg_net_from_interactions(self, interactions):
         print_msg('load bg_net by looping interactions.')
-        genes = np.array([r.split('_') for r in interactions]).reshape(-1)
+        genes = [g for r in interactions for g in _split_interaction(r)]
         genes = list(set([g for g in genes if g in self.adata.var_names]))
         if not genes:
             raise ValueError('The genes in given interactions do not exists in adata!')
@@ -177,7 +203,7 @@ class CRISGI():
 
         bg_net = np.zeros((len(genes), len(genes)))
         for r in interactions:
-            gene1, gene2 = r.split('_')
+            gene1, gene2 = _split_interaction(r)
             if gene1 in genes and gene2 in genes:
                 bg_net[gene2i[gene1], gene2i[gene2]] = 1
         return bg_net
@@ -543,7 +569,7 @@ class CRISGI():
     # CRISGI
     def _enrich_for_top_n(self, top_n, interaction_list, gene_sets, organism, background):
         print('_enrich_for_top_n', top_n)
-        gene_list = list(set(np.array([x.split('_') for x in interaction_list[:top_n]]).reshape(-1)))
+        gene_list = list(set(g for x in interaction_list[:top_n] for g in _split_interaction(x)))
         enr = gp.enrichr(gene_list=gene_list, gene_sets=gene_sets,
                          background=background,
                          organism=organism,
@@ -612,8 +638,9 @@ class CRISGI():
         df = df.sort_values(by=[sortby], ascending=ascending_flag)
         df = df[0:n_top_interactions]
         df = df[['names', sortby]]
-        df['gene1'] = df['names'].apply(lambda x: x.split('_')[0])
-        df['gene2'] = df['names'].apply(lambda x: x.split('_')[1])
+        _split_pairs = df['names'].apply(lambda x: _split_interaction(x))
+        df['gene1'] = _split_pairs.str[0]
+        df['gene2'] = _split_pairs.str[1]
         df1 = df[['gene1', sortby]]
         df2 = df[['gene2', sortby]]
         df1.columns = ['gene', sortby]
@@ -651,8 +678,9 @@ class CRISGI():
         df = pd.DataFrame(self.edata.layers[f'Ref_{method}_entropy'].T, columns=self.edata.obs_names,
                         index=self.edata.var_names)
         if split_interaction :
-            gene1 = df.index.str.split('_').str[0]
-            gene2 = df.index.str.split('_').str[1]
+            _split_pairs = df.index.map(lambda x: _split_interaction(x))
+            gene1 = _split_pairs.str[0]
+            gene2 = _split_pairs.str[1]
 
             df1 = df.copy()
             df1.index = gene1
@@ -775,8 +803,9 @@ class CRISGI():
         else:
             myinteractions = [x for x in interactions if x in edata.var_names]
 
-        genes1 = [x.split('_')[0] for x in myinteractions]
-        genes2 = [x.split('_')[1] for x in myinteractions]
+        _split_results = [_split_interaction(x) for x in myinteractions]
+        genes1 = [r[0] for r in _split_results]
+        genes2 = [r[1] for r in _split_results]
 
         sub_adata = adata[(adata.obs[self.groupby] == mytarget_group)]
         sub_adata = sub_adata[sub_adata.obs.sort_values(by=[unit_header, 'time']).index]
