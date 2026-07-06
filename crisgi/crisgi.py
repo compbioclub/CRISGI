@@ -79,7 +79,8 @@ class CRISGI():
                  flavor='cell_ranger',
                  class_type='time',
                  dataset='test',
-                 out_dir='./out'
+                 out_dir='./out',
+                 sep='_',
                  ):
 
         adata = adata.copy()
@@ -91,6 +92,11 @@ class CRISGI():
         self.n_threads = n_threads
         self.dataset = dataset
         self.class_type = class_type
+        if sep is None:
+            raise ValueError('sep must be a non-empty string.')
+        self.sep = str(sep)
+        if self.sep == '':
+            raise ValueError('sep must be a non-empty string.')
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
         self.out_dir = out_dir
@@ -146,7 +152,7 @@ class CRISGI():
         df = adata[test_obs, :].obs[headers].copy().drop_duplicates()
         df.index = df['test']
         edata.obs = df
-        edata.var_names = adata.var_names[row].astype(str) + '_' + adata.var_names[col].astype(str)
+        edata.var_names = adata.var_names[row].astype(str) + self.sep + adata.var_names[col].astype(str)
         edata.var['gene1'] = adata.var_names[row]
         edata.var['gene2'] = adata.var_names[col]
         edata.var['gene1_i'] = row
@@ -192,7 +198,7 @@ class CRISGI():
     # CRISGI
     def load_bg_net_from_interactions(self, interactions):
         print_msg('load bg_net by looping interactions.')
-        genes = [g for r in interactions for g in _split_interaction(r)]
+        genes = np.array([r.split(self.sep) for r in interactions]).reshape(-1)
         genes = list(set([g for g in genes if g in self.adata.var_names]))
         if not genes:
             raise ValueError('The genes in given interactions do not exists in adata!')
@@ -203,7 +209,7 @@ class CRISGI():
 
         bg_net = np.zeros((len(genes), len(genes)))
         for r in interactions:
-            gene1, gene2 = _split_interaction(r)
+            gene1, gene2 = r.split(self.sep)
             if gene1 in genes and gene2 in genes:
                 bg_net[gene2i[gene1], gene2i[gene2]] = 1
         return bg_net
@@ -569,7 +575,7 @@ class CRISGI():
     # CRISGI
     def _enrich_for_top_n(self, top_n, interaction_list, gene_sets, organism, background):
         print('_enrich_for_top_n', top_n)
-        gene_list = list(set(g for x in interaction_list[:top_n] for g in _split_interaction(x)))
+        gene_list = list(set(np.array([x.split(self.sep) for x in interaction_list[:top_n]]).reshape(-1)))
         enr = gp.enrichr(gene_list=gene_list, gene_sets=gene_sets,
                          background=background,
                          organism=organism,
@@ -638,9 +644,8 @@ class CRISGI():
         df = df.sort_values(by=[sortby], ascending=ascending_flag)
         df = df[0:n_top_interactions]
         df = df[['names', sortby]]
-        _split_pairs = df['names'].apply(lambda x: _split_interaction(x))
-        df['gene1'] = _split_pairs.str[0]
-        df['gene2'] = _split_pairs.str[1]
+        df['gene1'] = df['names'].apply(lambda x: x.split(self.sep)[0])
+        df['gene2'] = df['names'].apply(lambda x: x.split(self.sep)[1])
         df1 = df[['gene1', sortby]]
         df2 = df[['gene2', sortby]]
         df1.columns = ['gene', sortby]
@@ -678,9 +683,8 @@ class CRISGI():
         df = pd.DataFrame(self.edata.layers[f'Ref_{method}_entropy'].T, columns=self.edata.obs_names,
                         index=self.edata.var_names)
         if split_interaction :
-            _split_pairs = df.index.map(lambda x: _split_interaction(x))
-            gene1 = _split_pairs.str[0]
-            gene2 = _split_pairs.str[1]
+            gene1 = df.index.str.split(self.sep, n=1, regex=False).str[0]
+            gene2 = df.index.str.split(self.sep, n=1, regex=False).str[1]
 
             df1 = df.copy()
             df1.index = gene1
@@ -803,9 +807,8 @@ class CRISGI():
         else:
             myinteractions = [x for x in interactions if x in edata.var_names]
 
-        _split_results = [_split_interaction(x) for x in myinteractions]
-        genes1 = [r[0] for r in _split_results]
-        genes2 = [r[1] for r in _split_results]
+        genes1 = [x.split(self.sep)[0] for x in myinteractions]
+        genes2 = [x.split(self.sep)[1] for x in myinteractions]
 
         sub_adata = adata[(adata.obs[self.groupby] == mytarget_group)]
         sub_adata = sub_adata[sub_adata.obs.sort_values(by=[unit_header, 'time']).index]
