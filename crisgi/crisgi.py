@@ -683,8 +683,8 @@ class CRISGI():
         df = pd.DataFrame(self.edata.layers[f'Ref_{method}_entropy'].T, columns=self.edata.obs_names,
                         index=self.edata.var_names)
         if split_interaction :
-            gene1 = df.index.str.split(self.sep).str[0]
-            gene2 = df.index.str.split(self.sep).str[1]
+            gene1 = df.index.str.split(self.sep, n=1, regex=False).str[0]
+            gene2 = df.index.str.split(self.sep, n=1, regex=False).str[1]
 
             df1 = df.copy()
             df1.index = gene1
