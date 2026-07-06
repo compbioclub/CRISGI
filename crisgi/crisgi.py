@@ -92,7 +92,11 @@ class CRISGI():
         self.n_threads = n_threads
         self.dataset = dataset
         self.class_type = class_type
+        if sep is None:
+            raise ValueError('sep must be a non-empty string.')
         self.sep = str(sep)
+        if self.sep == '':
+            raise ValueError('sep must be a non-empty string.')
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
         self.out_dir = out_dir
