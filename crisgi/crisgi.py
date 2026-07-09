@@ -271,7 +271,7 @@ class CRISGI():
                 ref_gene2_i = ref_genes2i[gene2]
                 if ref_gb_net[ref_gene1_i, ref_gene2_i] >= self.bg_net_score_cutoff:
                     bg_net[i, j] = ref_gb_net[ref_gene1_i, ref_gene2_i]
-                    interactions.append(f'{gene1}_{gene2}')
+                    interactions.append(f'{gene1}{self.sep}{gene2}')
         return bg_net, interactions
 
     # CRISGI
@@ -288,7 +288,7 @@ class CRISGI():
             if ref_gb_net[ref_gene1_i, ref_gene2_i] >= self.bg_net_score_cutoff:
                 i, j = genes2i[gene1], genes2i[gene2]
                 bg_net[i, j] = ref_gb_net[ref_gene1_i, ref_gene2_i]
-                interactions.append(f'{gene1}_{gene2}')
+                interactions.append(f'{gene1}{self.sep}{gene2}')
         return bg_net, interactions
 
     # CRISGI
@@ -990,14 +990,14 @@ class CRISGI():
         
         if var == 'DER':
             der_interactions = edata.uns[f"prod_{symptom}_{symptom_types[0]}_DER"].copy()
-            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
+            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + self.sep + symp_edata.var["gene2"].astype(str))
             symp_edata = symp_edata[:, symp_edata.var["interaction"].isin(der_interactions)].copy()
         elif var == 'TER':
             ter_interactions = edata.uns[f"prod_{symptom}_{symptom_types[0]}_TER"].copy()
-            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
+            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + self.sep + symp_edata.var["gene2"].astype(str))
             symp_edata = symp_edata[:, symp_edata.var["interaction"].isin(ter_interactions)].copy()
         elif var == 'all':
-            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + "_" + symp_edata.var["gene2"].astype(str))
+            symp_edata.var["interaction"] = (symp_edata.var["gene1"].astype(str) + self.sep + symp_edata.var["gene2"].astype(str))
         else:
             raise ValueError(f"Unknown var: {var}")
 
