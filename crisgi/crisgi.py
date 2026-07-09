@@ -33,32 +33,6 @@ pd.options.mode.copy_on_write = True
 from crisgi.util import print_msg, get_array, set_adata_var, set_adata_obs
 
 
-def _split_interaction(interaction, ref_genes=None):
-    parts = interaction.split('_', 1)
-    if len(parts) == 2:
-        g1, g2 = parts[0], parts[1]
-        if ref_genes is None:
-            return g1, g2
-        if not isinstance(ref_genes, set):
-            ref_genes = set(ref_genes)
-        if g1 in ref_genes and g2 in ref_genes:
-            return g1, g2
-
-    ref_set = set(ref_genes) if ref_genes is not None else set()
-    for split_idx, ch in enumerate(interaction):
-        if ch != '_':
-            continue
-        g1 = interaction[:split_idx]
-        g2 = interaction[split_idx + 1:]
-        if (not ref_set) or (g1 in ref_set and g2 in ref_set):
-            return g1, g2
-
-    parts = interaction.split('_', 1)
-    if len(parts) == 2:
-        return parts[0], parts[1]
-    raise ValueError(f"Cannot split interaction name: {interaction!r}")
-
-
 def load_crisgi(pk_fn):
     crisgi_obj = pickle.load(open(pk_fn, 'rb'))
     print_msg(f'[Input] CRISGI object stored at {pk_fn} has been loaded.')
